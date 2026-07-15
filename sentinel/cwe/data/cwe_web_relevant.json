@@ -1,0 +1,842 @@
+[
+  {
+    "cwe_id": "CWE-89",
+    "name": "SQL Injection",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-564",
+    "name": "SQL Injection: Hibernate",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-943",
+    "name": "Improper Neutralization of Special Elements in Data Query Logic",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-77",
+    "name": "Improper Neutralization of Special Elements used in a Command (Command Injection)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-78",
+    "name": "Improper Neutralization of Special Elements used in an OS Command (OS Command Injection)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-88",
+    "name": "Improper Neutralization of Argument Delimiters in a Command (Argument Injection)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-90",
+    "name": "Improper Neutralization of Special Elements used in an LDAP Query (LDAP Injection)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-643",
+    "name": "Improper Neutralization of Data within XPath Expressions (XPath Injection)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-652",
+    "name": "Improper Neutralization of Data within XQuery Expressions (XQuery Injection)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-93",
+    "name": "Improper Neutralization of CRLF Sequences (CRLF Injection)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-113",
+    "name": "Improper Neutralization of CRLF Sequences in HTTP Headers (HTTP Response Splitting)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-1336",
+    "name": "Improper Neutralization of Special Elements Used in a Template Engine (SSTI)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-91",
+    "name": "XML Injection (aka Blind XPath Injection)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-611",
+    "name": "Improper Restriction of XML External Entity Reference (XXE)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-776",
+    "name": "Improper Restriction of Recursive Entity References in DTDs (XML Entity Expansion)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-917",
+    "name": "Improper Neutralization of Special Elements used in an Expression Language Statement (EL Injection)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-94",
+    "name": "Improper Control of Generation of Code (Code Injection)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-95",
+    "name": "Improper Neutralization of Directives in Dynamically Evaluated Code (Eval Injection)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-96",
+    "name": "Improper Neutralization of Directives in Statically Saved Code (Static Code Injection)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-98",
+    "name": "Improper Control of Filename for Include/Require Statement in PHP Program (PHP Remote File Inclusion)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-99",
+    "name": "Improper Control of Resource Identifiers (Resource Injection)",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-116",
+    "name": "Improper Encoding or Escaping of Output",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-838",
+    "name": "Inappropriate Encoding for Output Context",
+    "category": "injection"
+  },
+  {
+    "cwe_id": "CWE-79",
+    "name": "Improper Neutralization of Input During Web Page Generation (Cross-Site Scripting)",
+    "category": "xss"
+  },
+  {
+    "cwe_id": "CWE-80",
+    "name": "Improper Neutralization of Script-Related HTML Tags in a Web Page (Basic XSS)",
+    "category": "xss"
+  },
+  {
+    "cwe_id": "CWE-81",
+    "name": "Improper Neutralization of Script in an Error Message Web Page",
+    "category": "xss"
+  },
+  {
+    "cwe_id": "CWE-82",
+    "name": "Improper Neutralization of Script in Attributes of IMG Tags in a Web Page",
+    "category": "xss"
+  },
+  {
+    "cwe_id": "CWE-83",
+    "name": "Improper Neutralization of Script in Attributes in a Web Page",
+    "category": "xss"
+  },
+  {
+    "cwe_id": "CWE-87",
+    "name": "Improper Neutralization of Alternate XSS Syntax",
+    "category": "xss"
+  },
+  {
+    "cwe_id": "CWE-287",
+    "name": "Improper Authentication",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-288",
+    "name": "Authentication Bypass Using an Alternate Path or Channel",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-289",
+    "name": "Authentication Bypass by Alternate Name",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-290",
+    "name": "Authentication Bypass by Spoofing",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-291",
+    "name": "Reliance on IP Address for Authentication",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-294",
+    "name": "Authentication Bypass by Capture-replay",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-295",
+    "name": "Improper Certificate Validation",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-296",
+    "name": "Improper Following of a Certificate's Chain of Trust",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-297",
+    "name": "Improper Validation of Certificate with Host Mismatch",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-298",
+    "name": "Improper Validation of Certificate Expiration",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-299",
+    "name": "Improper Check for Certificate Revocation",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-302",
+    "name": "Authentication Bypass by Assumed-Immutable Data",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-303",
+    "name": "Incorrect Implementation of Authentication Algorithm",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-304",
+    "name": "Missing Critical Step in Authentication",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-305",
+    "name": "Authentication Bypass by Primary Weakness",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-308",
+    "name": "Use of Single-factor Authentication",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-309",
+    "name": "Use of Password System for Primary Authentication",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-1390",
+    "name": "Weak Authentication",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-521",
+    "name": "Weak Password Requirements",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-620",
+    "name": "Unverified Password Change",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-640",
+    "name": "Weak Password Recovery Mechanism for Forgotten Password",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-613",
+    "name": "Insufficient Session Expiration",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-384",
+    "name": "Session Fixation",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-1216",
+    "name": "Lockout Mechanism Errors",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-798",
+    "name": "Use of Hard-coded Credentials",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-259",
+    "name": "Use of Hard-coded Password",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-321",
+    "name": "Use of Hard-coded Cryptographic Key",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-256",
+    "name": "Plaintext Storage of a Password",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-257",
+    "name": "Storing Passwords in a Recoverable Format",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-522",
+    "name": "Insufficiently Protected Credentials",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-263",
+    "name": "Password Aging with Long Expiration",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-262",
+    "name": "Not Using Password Aging",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-654",
+    "name": "Reliance on a Single Factor in a Security Decision",
+    "category": "auth_session"
+  },
+  {
+    "cwe_id": "CWE-284",
+    "name": "Improper Access Control",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-285",
+    "name": "Improper Authorization",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-639",
+    "name": "Authorization Bypass Through User-Controlled Key (IDOR)",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-862",
+    "name": "Missing Authorization",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-863",
+    "name": "Incorrect Authorization",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-425",
+    "name": "Direct Request ('Forced Browsing')",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-276",
+    "name": "Incorrect Default Permissions",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-732",
+    "name": "Incorrect Permission Assignment for Critical Resource",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-282",
+    "name": "Improper Ownership Management",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-283",
+    "name": "Unverified Ownership",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-268",
+    "name": "Privilege Chaining",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-269",
+    "name": "Improper Privilege Management",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-270",
+    "name": "Privilege Context Switching Error",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-271",
+    "name": "Privilege Dropping / Lowering Errors",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-272",
+    "name": "Least Privilege Violation",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-273",
+    "name": "Improper Check for Dropped Privileges",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-274",
+    "name": "Improper Handling of Insufficient Privileges",
+    "category": "access_control"
+  },
+  {
+    "cwe_id": "CWE-840",
+    "name": "Business Logic Errors",
+    "category": "business_logic"
+  },
+  {
+    "cwe_id": "CWE-841",
+    "name": "Improper Enforcement of Behavioral Workflow",
+    "category": "business_logic"
+  },
+  {
+    "cwe_id": "CWE-918",
+    "name": "Server-Side Request Forgery (SSRF)",
+    "category": "ssrf"
+  },
+  {
+    "cwe_id": "CWE-441",
+    "name": "Unintended Proxy or Intermediary ('Confused Deputy')",
+    "category": "ssrf"
+  },
+  {
+    "cwe_id": "CWE-502",
+    "name": "Deserialization of Untrusted Data",
+    "category": "deserialization"
+  },
+  {
+    "cwe_id": "CWE-829",
+    "name": "Inclusion of Functionality from Untrusted Control Sphere",
+    "category": "deserialization"
+  },
+  {
+    "cwe_id": "CWE-16",
+    "name": "Configuration",
+    "category": "misconfiguration"
+  },
+  {
+    "cwe_id": "CWE-1392",
+    "name": "Use of Default Credentials",
+    "category": "misconfiguration"
+  },
+  {
+    "cwe_id": "CWE-209",
+    "name": "Generation of Error Message Containing Sensitive Information",
+    "category": "misconfiguration"
+  },
+  {
+    "cwe_id": "CWE-548",
+    "name": "Exposure of Information Through Directory Listing",
+    "category": "misconfiguration"
+  },
+  {
+    "cwe_id": "CWE-215",
+    "name": "Insertion of Sensitive Information Into Debugging Code",
+    "category": "misconfiguration"
+  },
+  {
+    "cwe_id": "CWE-489",
+    "name": "Active Debug Code",
+    "category": "misconfiguration"
+  },
+  {
+    "cwe_id": "CWE-1188",
+    "name": "Insecure Default Initialization of Resource",
+    "category": "misconfiguration"
+  },
+  {
+    "cwe_id": "CWE-1004",
+    "name": "Sensitive Cookie Without 'HttpOnly' Flag",
+    "category": "misconfiguration"
+  },
+  {
+    "cwe_id": "CWE-614",
+    "name": "Sensitive Cookie in HTTPS Session Without 'Secure' Attribute",
+    "category": "misconfiguration"
+  },
+  {
+    "cwe_id": "CWE-1275",
+    "name": "Sensitive Cookie with Improper SameSite Attribute",
+    "category": "misconfiguration"
+  },
+  {
+    "cwe_id": "CWE-668",
+    "name": "Exposure of Resource to Wrong Sphere",
+    "category": "misconfiguration"
+  },
+  {
+    "cwe_id": "CWE-327",
+    "name": "Use of a Broken or Risky Cryptographic Algorithm",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-326",
+    "name": "Inadequate Encryption Strength",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-330",
+    "name": "Use of Insufficiently Random Values",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-331",
+    "name": "Insufficient Entropy",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-338",
+    "name": "Use of Cryptographically Weak Pseudo-Random Number Generator (PRNG)",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-319",
+    "name": "Cleartext Transmission of Sensitive Information",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-311",
+    "name": "Missing Encryption of Sensitive Data",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-312",
+    "name": "Cleartext Storage of Sensitive Information",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-313",
+    "name": "Cleartext Storage in a File or on Disk",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-315",
+    "name": "Cleartext Storage of Sensitive Information in a Cookie",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-316",
+    "name": "Cleartext Storage of Sensitive Information in Memory",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-323",
+    "name": "Reusing a Nonce, Key Pair in Encryption",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-325",
+    "name": "Missing Cryptographic Step",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-336",
+    "name": "Same Seed in Pseudo-Random Number Generator (PRNG)",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-347",
+    "name": "Improper Verification of Cryptographic Signature",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-757",
+    "name": "Selection of Less-Secure Algorithm During Negotiation ('Algorithm Downgrade')",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-780",
+    "name": "Use of RSA Algorithm without OAEP",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-916",
+    "name": "Use of Password Hash With Insufficient Computational Effort",
+    "category": "cryptographic"
+  },
+  {
+    "cwe_id": "CWE-352",
+    "name": "Cross-Site Request Forgery (CSRF)",
+    "category": "csrf"
+  },
+  {
+    "cwe_id": "CWE-601",
+    "name": "URL Redirection to Untrusted Site ('Open Redirect')",
+    "category": "open_redirect"
+  },
+  {
+    "cwe_id": "CWE-22",
+    "name": "Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')",
+    "category": "path_traversal"
+  },
+  {
+    "cwe_id": "CWE-23",
+    "name": "Relative Path Traversal",
+    "category": "path_traversal"
+  },
+  {
+    "cwe_id": "CWE-36",
+    "name": "Absolute Path Traversal",
+    "category": "path_traversal"
+  },
+  {
+    "cwe_id": "CWE-73",
+    "name": "External Control of File Name or Path",
+    "category": "path_traversal"
+  },
+  {
+    "cwe_id": "CWE-434",
+    "name": "Unrestricted Upload of File with Dangerous Type",
+    "category": "file_upload"
+  },
+  {
+    "cwe_id": "CWE-646",
+    "name": "Reliance on File Name or Extension of Externally-Supplied File",
+    "category": "file_upload"
+  },
+  {
+    "cwe_id": "CWE-616",
+    "name": "Incomplete Identification of Uploaded File Variables (PHP)",
+    "category": "file_upload"
+  },
+  {
+    "cwe_id": "CWE-362",
+    "name": "Concurrent Execution using Shared Resource with Improper Synchronization ('Race Condition')",
+    "category": "race_condition"
+  },
+  {
+    "cwe_id": "CWE-366",
+    "name": "Race Condition within a Thread",
+    "category": "race_condition"
+  },
+  {
+    "cwe_id": "CWE-367",
+    "name": "Time-of-check Time-of-use (TOCTOU) Race Condition",
+    "category": "race_condition"
+  },
+  {
+    "cwe_id": "CWE-770",
+    "name": "Allocation of Resources Without Limits or Throttling",
+    "category": "resource_exhaustion"
+  },
+  {
+    "cwe_id": "CWE-799",
+    "name": "Improper Control of Interaction Frequency",
+    "category": "resource_exhaustion"
+  },
+  {
+    "cwe_id": "CWE-400",
+    "name": "Uncontrolled Resource Consumption",
+    "category": "resource_exhaustion"
+  },
+  {
+    "cwe_id": "CWE-405",
+    "name": "Asymmetric Resource Consumption (Amplification)",
+    "category": "resource_exhaustion"
+  },
+  {
+    "cwe_id": "CWE-406",
+    "name": "Insufficient Control of Network Message Volume (Network Amplification)",
+    "category": "resource_exhaustion"
+  },
+  {
+    "cwe_id": "CWE-674",
+    "name": "Uncontrolled Recursion",
+    "category": "resource_exhaustion"
+  },
+  {
+    "cwe_id": "CWE-1104",
+    "name": "Use of Unmaintained Third Party Components",
+    "category": "outdated_components"
+  },
+  {
+    "cwe_id": "CWE-937",
+    "name": "OWASP Top Ten 2013 Category A9 - Using Known Vulnerable Components",
+    "category": "outdated_components"
+  },
+  {
+    "cwe_id": "CWE-1035",
+    "name": "OWASP Top Ten 2017 Category A9 - Using Components with Known Vulnerabilities",
+    "category": "outdated_components"
+  },
+  {
+    "cwe_id": "CWE-1021",
+    "name": "Improper Restriction of Rendered UI Layers or Frames (Clickjacking)",
+    "category": "clickjacking"
+  },
+  {
+    "cwe_id": "CWE-451",
+    "name": "User Interface (UI) Misrepresentation of Critical Information",
+    "category": "clickjacking"
+  },
+  {
+    "cwe_id": "CWE-942",
+    "name": "Permissive Cross-domain Policy with Untrusted Domains",
+    "category": "cors"
+  },
+  {
+    "cwe_id": "CWE-346",
+    "name": "Origin Validation Error",
+    "category": "cors"
+  },
+  {
+    "cwe_id": "CWE-915",
+    "name": "Improperly Controlled Modification of Dynamically-Determined Object Attributes (Mass Assignment)",
+    "category": "mass_assignment"
+  },
+  {
+    "cwe_id": "CWE-1321",
+    "name": "Improperly Controlled Modification of Object Prototype Attributes ('Prototype Pollution')",
+    "category": "mass_assignment"
+  },
+  {
+    "cwe_id": "CWE-200",
+    "name": "Exposure of Sensitive Information to an Unauthorized Actor",
+    "category": "information_exposure"
+  },
+  {
+    "cwe_id": "CWE-201",
+    "name": "Insertion of Sensitive Information Into Sent Data",
+    "category": "information_exposure"
+  },
+  {
+    "cwe_id": "CWE-203",
+    "name": "Observable Discrepancy",
+    "category": "information_exposure"
+  },
+  {
+    "cwe_id": "CWE-204",
+    "name": "Observable Response Discrepancy",
+    "category": "information_exposure"
+  },
+  {
+    "cwe_id": "CWE-205",
+    "name": "Observable Behavioral Discrepancy",
+    "category": "information_exposure"
+  },
+  {
+    "cwe_id": "CWE-208",
+    "name": "Observable Timing Discrepancy",
+    "category": "information_exposure"
+  },
+  {
+    "cwe_id": "CWE-213",
+    "name": "Exposure of Sensitive Information Due to Incompatible Policies",
+    "category": "information_exposure"
+  },
+  {
+    "cwe_id": "CWE-359",
+    "name": "Exposure of Private Personal Information to an Unauthorized Actor",
+    "category": "information_exposure"
+  },
+  {
+    "cwe_id": "CWE-497",
+    "name": "Exposure of Sensitive System Information to an Unauthorized Control Sphere",
+    "category": "information_exposure"
+  },
+  {
+    "cwe_id": "CWE-538",
+    "name": "Insertion of Sensitive Information into Externally-Accessible File or Directory",
+    "category": "information_exposure"
+  },
+  {
+    "cwe_id": "CWE-540",
+    "name": "Inclusion of Sensitive Information in Source Code",
+    "category": "information_exposure"
+  },
+  {
+    "cwe_id": "CWE-541",
+    "name": "Inclusion of Sensitive Information in an Include File",
+    "category": "information_exposure"
+  },
+  {
+    "cwe_id": "CWE-532",
+    "name": "Insertion of Sensitive Information into Log File",
+    "category": "information_exposure"
+  },
+  {
+    "cwe_id": "CWE-598",
+    "name": "Use of GET Request Method With Sensitive Query Strings",
+    "category": "information_exposure"
+  },
+  {
+    "cwe_id": "CWE-20",
+    "name": "Improper Input Validation",
+    "category": "input_validation"
+  },
+  {
+    "cwe_id": "CWE-1284",
+    "name": "Improper Validation of Specified Quantity in Input",
+    "category": "input_validation"
+  },
+  {
+    "cwe_id": "CWE-129",
+    "name": "Improper Validation of Array Index",
+    "category": "input_validation"
+  },
+  {
+    "cwe_id": "CWE-1287",
+    "name": "Improper Validation of Specified Type of Input",
+    "category": "input_validation"
+  },
+  {
+    "cwe_id": "CWE-1289",
+    "name": "Improper Validation of Unsafe Equivalence in Input",
+    "category": "input_validation"
+  },
+  {
+    "cwe_id": "CWE-172",
+    "name": "Encoding Error",
+    "category": "input_validation"
+  },
+  {
+    "cwe_id": "CWE-179",
+    "name": "Incorrect Behavior Order: Early Validation",
+    "category": "input_validation"
+  },
+  {
+    "cwe_id": "CWE-183",
+    "name": "Permissive List of Allowed Inputs",
+    "category": "input_validation"
+  },
+  {
+    "cwe_id": "CWE-184",
+    "name": "Incomplete List of Disallowed Inputs",
+    "category": "input_validation"
+  },
+  {
+    "cwe_id": "CWE-190",
+    "name": "Integer Overflow or Wraparound",
+    "category": "input_validation"
+  },
+  {
+    "cwe_id": "CWE-306",
+    "name": "Missing Authentication for Critical Function",
+    "category": "api_security"
+  },
+  {
+    "cwe_id": "CWE-307",
+    "name": "Improper Restriction of Excessive Authentication Attempts",
+    "category": "api_security"
+  },
+  {
+    "cwe_id": "CWE-651",
+    "name": "Exposure of WSDL File Containing Sensitive Information",
+    "category": "api_security"
+  }
+]

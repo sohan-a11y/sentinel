@@ -1,0 +1,38 @@
+version: "3.9"
+
+# Local test lab: an intentionally-vulnerable target (OWASP Juice Shop) plus
+# ZAP running in daemon/API mode plus Postgres for Sentinel's own storage.
+# This is for demoing/testing Sentinel against a target you actually own
+# (localhost containers you control) — never point Sentinel at anything else
+# without completing Phase 0 registration first.
+services:
+  juice-shop:
+    image: bkimminich/juice-shop:latest
+    container_name: sentinel-juice-shop
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    container_name: sentinel-zap
+    command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.disablekey=true -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sentinel-postgres
+    environment:
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: sentinel_dev_only
+      POSTGRES_DB: sentinel
+    ports:
+      - "5432:5432"
+    volumes:
+      - sentinel_pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  sentinel_pg_data:
