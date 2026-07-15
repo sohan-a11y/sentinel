@@ -192,6 +192,8 @@ def run(
     cwe_items: list[CweChecklistItem],
 ) -> list[RawFinding]:
     guardrails.enforce_not_halted(db, scan_session)
+    # Phase 0 is executing here: Tier A gate — always passes, spider/passive
+    # scan send no attack payloads regardless of the canary result.
     guardrails.enforce_tier(ActionTier.TIER_A, scan_session.environment_tier)
 
     host = guardrails.normalize_host(registration.domain)
@@ -207,6 +209,11 @@ def run(
             findings.extend(_convert_alerts(passive_alerts, "tier_a", cwe_items, db))
 
             guardrails.enforce_not_halted(db, scan_session)
+            # Phase 0 is executing here: this is the check that actually
+            # matters — active scan sends live attack payloads, so it only
+            # proceeds if Phase 0's canary probe verified this session safe
+            # (scan_session.environment_tier == VERIFIED_SAFE). Otherwise this
+            # raises and we skip straight to logging it below, no active scan.
             try:
                 guardrails.enforce_tier(ActionTier.TIER_B, scan_session.environment_tier)
             except TierViolationError as exc:

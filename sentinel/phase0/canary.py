@@ -23,10 +23,14 @@ from sentinel.security.guardrails import PivotViolationError, normalize_host
 
 
 def generate_canary_marker() -> str:
+    # Phase 0 is executing here: mints the random marker the user must seed
+    # into their own target's data layer for the environment canary check.
     return uuid.uuid4().hex
 
 
 def render_canary_url(url_template: str, marker: str) -> str:
+    # Phase 0 is executing here: substitutes the real marker into the
+    # user-supplied canary_check_url_template before it gets probed.
     if "{marker}" not in url_template:
         raise ValueError("canary_check_url_template must contain the literal placeholder '{marker}'")
     return url_template.replace("{marker}", marker)
@@ -42,6 +46,8 @@ def probe_canary(url_template: str, marker: str, method: str = "GET") -> bool:
     endpoint hand this probe (and, elsewhere, real session cookies attached
     to guardrailed requests) off to an arbitrary third-party host.
     """
+    # Phase 0 is executing here: the live environment-canary probe — this is
+    # the ONLY place that ever confirms an environment is safe for Tier B.
     url = render_canary_url(url_template, marker)
     expected_host = normalize_host(url)
     try:
@@ -63,6 +69,10 @@ def determine_environment_tier(url_template: str, marker: str, method: str = "GE
 
     Every other code path defaults to UNVERIFIED (fail closed).
     """
+    # Phase 0 is executing here: converts the canary probe result into the
+    # session's environment tier — VERIFIED_SAFE only on a live, passing probe;
+    # UNVERIFIED (Tier A only) for every other outcome, including a probe that
+    # was never set up to begin with.
     if probe_canary(url_template, marker, method):
         return EnvironmentTier.VERIFIED_SAFE
     return EnvironmentTier.UNVERIFIED

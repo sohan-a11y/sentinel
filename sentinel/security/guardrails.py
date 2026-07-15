@@ -86,6 +86,10 @@ def enforce_target_authorized(db: Session, domain: str) -> TargetRegistration:
     Ad hoc domains typed at scan time that are not an active, ownership
     verified row in target_registrations are rejected here — full stop.
     """
+    # Phase 0 is executing here: this is the enforcement side of Phase 0
+    # step 1 (domain ownership) — checks the registration row Phase 0 wrote,
+    # not a fresh live check itself (that already happened at verification
+    # time; this just refuses to proceed unless that record says it passed).
     host = normalize_host(domain)
     registration = (
         db.query(TargetRegistration)
@@ -120,6 +124,10 @@ def enforce_tier(requested_tier: ActionTier, environment_tier: EnvironmentTier) 
     """Tier B (destructive/exploitative) actions require a canary check that
     passed THIS session. environment_tier is stamped fresh per ScanSession by
     sentinel.phase0.canary — it is never inherited from a prior session."""
+    # Phase 0 is executing here: this is the enforcement side of Phase 0
+    # step 2 (environment canary) — environment_tier is exactly the value
+    # sentinel.phase0.canary.determine_environment_tier produced for this
+    # session; every Tier B call site in every engine passes through this.
     if requested_tier == ActionTier.TIER_B and environment_tier != EnvironmentTier.VERIFIED_SAFE:
         raise TierViolationError(
             "Tier B (destructive/exploitative) action blocked: environment canary has not "

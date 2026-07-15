@@ -111,6 +111,9 @@ class TargetRegistration(Base):
 
     @property
     def is_ownership_verified(self) -> bool:
+        # Phase 0 is executing here: this is the exact flag
+        # guardrails.enforce_target_authorized reads to decide whether
+        # Phase 0 step 1 (domain ownership) has ever passed for this row.
         return self.verification_passed_at is not None
 
     def to_dict(self) -> dict:

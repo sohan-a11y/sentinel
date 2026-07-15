@@ -1,9 +1,14 @@
 """Thin LLM wrapper shared by every reasoning agent (CWE mapping, IDOR agent).
 
 Only does two things: plain chat completion, and completion constrained to a
-JSON schema (via tool-forcing on Anthropic, response_format on OpenAI). Agents
-should never talk to the anthropic/openai SDKs directly — go through here so
-model choice and retry behavior stay in one place.
+JSON schema (via tool-forcing on Anthropic, response_format on OpenAI/
+OpenRouter). Agents should never talk to the anthropic/openai SDKs directly —
+go through here so model choice and retry behavior stay in one place.
+
+Three backends, checked in this order: anthropic (native SDK) > openrouter
+(OpenAI SDK pointed at OpenRouter's base_url — OpenRouter is OpenAI-API-
+compatible) > openai (native SDK, official API). "openrouter" and "openai"
+share the same request shape below since OpenRouter mirrors OpenAI's API.
 """
 from __future__ import annotations
 
@@ -28,12 +33,19 @@ class LlmClient:
             import anthropic
 
             return "anthropic", anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        if settings.openrouter_api_key:
+            import openai
+
+            return "openai", openai.OpenAI(
+                api_key=settings.openrouter_api_key, base_url=settings.openrouter_base_url
+            )
         if settings.openai_api_key:
             import openai
 
             return "openai", openai.OpenAI(api_key=settings.openai_api_key)
         raise LlmConfigurationError(
-            "No LLM API key configured. Set SENTINEL_ANTHROPIC_API_KEY or SENTINEL_OPENAI_API_KEY."
+            "No LLM API key configured. Set SENTINEL_ANTHROPIC_API_KEY, "
+            "SENTINEL_OPENROUTER_API_KEY, or SENTINEL_OPENAI_API_KEY."
         )
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))

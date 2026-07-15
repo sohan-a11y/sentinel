@@ -107,6 +107,10 @@ def run(
     cwe_items: list[CweChecklistItem],
 ) -> list[RawFinding]:
     guardrails.enforce_not_halted(db, scan_session)
+    # Phase 0 is executing here: enforce_tier checks scan_session.environment_tier,
+    # which is exactly what Phase 0's canary probe decided for this session
+    # (nuclei only ever runs Tier A, so this always passes — kept for consistency
+    # with every other engine, which all check tier before doing anything).
     guardrails.enforce_tier(ActionTier.TIER_A, scan_session.environment_tier)
 
     host = guardrails.normalize_host(registration.domain)

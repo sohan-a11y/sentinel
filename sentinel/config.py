@@ -17,9 +17,16 @@ class Settings(BaseSettings):
     # can start/halt scans or deregister targets someone else registered.
     api_key: str | None = None
 
-    # LLM (either key works; anthropic preferred if both set)
+    # LLM — set exactly one. Precedence: anthropic > openrouter > openai.
+    # OpenRouter is OpenAI-API-compatible, reached via the openai SDK with a
+    # base_url override; its model IDs are "provider/model", e.g.
+    # "anthropic/claude-sonnet-4.5" or "openai/gpt-4o-mini" — set llm_model
+    # accordingly when using it (the default below is Anthropic-native and
+    # will 404 against OpenRouter).
     anthropic_api_key: str | None = None
+    openrouter_api_key: str | None = None
     openai_api_key: str | None = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
     llm_model: str = "claude-sonnet-4-5"
 
     # Scan engines

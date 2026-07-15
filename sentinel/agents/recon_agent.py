@@ -348,6 +348,9 @@ class Crawler:
 def recon_node(state: SentinelState) -> dict:
     domain = state["target_domain"]
     with get_session() as db:
+        # Phase 0 is executing here: Agent 1 (recon) cannot crawl a single
+        # page until enforce_target_authorized confirms this domain is
+        # registered and ownership-verified.
         registration = guardrails.enforce_target_authorized(db, domain)
         scan_session_id = state.get("scan_session_id")
         if scan_session_id is not None:

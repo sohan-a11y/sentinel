@@ -201,6 +201,49 @@ class TestLlmPassUnavailableFallback:
         assert items[0]["applicable"] is False
         assert items[0]["reason"] == "no multi-step workflow observed"
 
+    def test_batch_call_failure_falls_back_to_applicable_instead_of_crashing(self, monkeypatch):
+        """Regression: a bad model name, rate limit, or any other error from
+        the actual API call (not just a missing key) used to propagate
+        uncaught out of apply_llm_pass and crash the whole mapping node."""
+
+        class _FailingClient:
+            def complete_json(self, *, system, user, json_schema, schema_name):
+                raise RuntimeError("model 'bogus/does-not-exist' not found")
+
+        monkeypatch.setattr(cwe_mapping_agent, "get_llm_client", lambda: _FailingClient())
+
+        undecided = [{"cwe_id": "CWE-840", "name": "Business Logic Errors", "category": "business_logic"}]
+        items, llm_available = apply_llm_pass(undecided, {})
+
+        assert llm_available is False
+        assert len(items) == 1
+        assert items[0]["applicable"] is True
+        assert "defaulting to applicable" in items[0]["reason"]
+
+    def test_one_failing_batch_does_not_lose_verdicts_from_other_batches(self, monkeypatch):
+        calls = {"n": 0}
+
+        class _PartiallyFailingClient:
+            def complete_json(self, *, system, user, json_schema, schema_name):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    raise RuntimeError("transient error")
+                return {"verdicts": [{"cwe_id": "CWE-841", "applicable": False, "reason": "no workflow"}]}
+
+        monkeypatch.setattr(cwe_mapping_agent, "get_llm_client", lambda: _PartiallyFailingClient())
+        monkeypatch.setattr(cwe_mapping_agent, "LLM_BATCH_SIZE", 1)
+
+        undecided = [
+            {"cwe_id": "CWE-840", "name": "Business Logic Errors", "category": "business_logic"},
+            {"cwe_id": "CWE-841", "name": "Improper Workflow Enforcement", "category": "business_logic"},
+        ]
+        items, llm_available = apply_llm_pass(undecided, {})
+
+        assert llm_available is False
+        by_id = {item["cwe_id"]: item for item in items}
+        assert by_id["CWE-840"]["applicable"] is True  # failed batch -> fallback default
+        assert by_id["CWE-841"]["applicable"] is False  # succeeding batch -> real verdict preserved
+
 
 @contextlib.contextmanager
 def _session_scope(db_session):

@@ -38,6 +38,9 @@ class RegisterTargetResponse(BaseModel):
 
 @router.post("/register", response_model=RegisterTargetResponse, status_code=201)
 def register_target(payload: RegisterTargetRequest, db: Session = Depends(get_db)) -> RegisterTargetResponse:
+    # Phase 0 is executing here: HTTP entry point for registration.register_target
+    # — creates the unverified row and hands back the token/marker the caller
+    # must prove they control before anything can scan this domain.
     try:
         reg = registry.register_target(
             db,
@@ -72,6 +75,8 @@ def register_target(payload: RegisterTargetRequest, db: Session = Depends(get_db
 
 @router.post("/{domain}/verify")
 def verify_target(domain: str, db: Session = Depends(get_db)) -> dict:
+    # Phase 0 is executing here: HTTP entry point for
+    # registry.run_ownership_verification — triggers the live HTTP/DNS check.
     try:
         reg = registry.run_ownership_verification(db, domain)
     except TargetNotRegisteredError as exc:
@@ -87,6 +92,8 @@ def verify_target(domain: str, db: Session = Depends(get_db)) -> dict:
 
 @router.get("/{domain}")
 def get_target(domain: str, db: Session = Depends(get_db)) -> dict:
+    # Phase 0 is executing here: HTTP entry point for
+    # registry.get_active_registration — read-only status lookup.
     try:
         reg = registry.get_active_registration(db, domain)
     except PivotViolationError as exc:
@@ -98,6 +105,8 @@ def get_target(domain: str, db: Session = Depends(get_db)) -> dict:
 
 @router.delete("/{domain}", status_code=204, response_class=Response)
 def deactivate_target(domain: str, db: Session = Depends(get_db)) -> Response:
+    # Phase 0 is executing here: HTTP entry point for
+    # registry.deactivate_target — revokes the registration.
     try:
         registry.deactivate_target(db, domain)
     except PivotViolationError as exc:

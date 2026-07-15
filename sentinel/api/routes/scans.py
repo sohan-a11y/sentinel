@@ -27,6 +27,9 @@ def _run_pipeline_in_background(scan_session_id: int, domain: str, environment_t
 
 @router.post("/start", status_code=202)
 def start_scan(payload: StartScanRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> dict:
+    # Phase 0 is executing here: registry.start_scan_session re-runs BOTH
+    # Phase 0 checks (authorization + a fresh canary probe) before a single
+    # agent gets to run — this call is the gate for the entire pipeline below.
     try:
         scan_session = registry.start_scan_session(db, payload.domain)
     except UnauthorizedTargetError as exc:

@@ -24,6 +24,8 @@ from sentinel.security.guardrails import PivotViolationError
 
 
 def generate_verification_token() -> str:
+    # Phase 0 is executing here: mints the token the requester must place at
+    # the well-known URL or DNS TXT record to prove domain ownership.
     return secrets.token_urlsafe(24)
 
 
@@ -35,6 +37,8 @@ def check_well_known(domain: str, token: str) -> bool:
     """Fails closed on a redirect to a different host, too: safe_http.get_same_host
     re-validates every hop against `domain` rather than trusting httpx's
     follow_redirects to land somewhere still worth trusting."""
+    # Phase 0 is executing here: HTTP method of domain-ownership verification —
+    # live-fetches the well-known token file and checks the token is present.
     url = _well_known_url(domain)
     try:
         response = safe_http.get_same_host(
@@ -50,6 +54,8 @@ def check_well_known(domain: str, token: str) -> bool:
 
 
 def check_dns_txt(domain: str, token: str) -> bool:
+    # Phase 0 is executing here: DNS method of domain-ownership verification —
+    # live-resolves the _sentinel-verify TXT record and checks the token is present.
     record_name = f"{settings.dns_txt_prefix}.{domain}"
     resolver = dns.resolver.Resolver()
     resolver.timeout = settings.verification_dns_timeout_seconds
@@ -70,6 +76,8 @@ def check_dns_txt(domain: str, token: str) -> bool:
 
 def verify_domain_ownership(domain: str, token: str) -> VerificationMethod | None:
     """Try both methods. Returns the method that passed, or None if neither did."""
+    # Phase 0 is executing here: orchestrates domain-ownership verification —
+    # tries the HTTP well-known method first, then falls back to DNS TXT.
     if check_well_known(domain, token):
         return VerificationMethod.WELL_KNOWN_HTTP
     if check_dns_txt(domain, token):

@@ -402,10 +402,12 @@ def _judge_batch(client: LlmClient, batch: list[dict], site_map: SiteMap) -> dic
 def apply_llm_pass(undecided: list[dict], site_map: SiteMap) -> tuple[list[CweChecklistItem], bool]:
     """Judges whatever the rule pass couldn't decide.
 
-    Returns (items, llm_available). When no LLM API key is configured,
-    every undecided CWE defaults to applicable=True with a fixed manual-
-    triage reason — a fail-open default so a missing key never silently
-    drops CWE coverage.
+    Returns (items, llm_available). When no LLM API key is configured, OR
+    when a batch call itself fails (bad model name, rate limit, transient API
+    error — anything, not just missing credentials), every undecided CWE in
+    that batch defaults to applicable=True with a fixed manual-triage reason
+    — a fail-open default so a flaky/misconfigured LLM never silently drops
+    CWE coverage or crashes the whole mapping pass.
     """
     if not undecided:
         return [], True
@@ -416,8 +418,13 @@ def apply_llm_pass(undecided: list[dict], site_map: SiteMap) -> tuple[list[CweCh
         return [_make_item(cwe, True, LLM_UNAVAILABLE_REASON) for cwe in undecided], False
 
     verdicts: dict[str, Verdict] = {}
+    all_batches_succeeded = True
     for batch in _chunked(undecided, LLM_BATCH_SIZE):
-        verdicts.update(_judge_batch(client, batch, site_map))
+        try:
+            verdicts.update(_judge_batch(client, batch, site_map))
+        except Exception:
+            all_batches_succeeded = False
+            continue
 
     items: list[CweChecklistItem] = []
     for cwe in undecided:
@@ -429,7 +436,7 @@ def apply_llm_pass(undecided: list[dict], site_map: SiteMap) -> tuple[list[CweCh
                 "LLM did not return a verdict for this CWE — defaulting to applicable, needs manual triage",
             )
         items.append(_make_item(cwe, applicable, reason))
-    return items, True
+    return items, all_batches_succeeded
 
 
 # --------------------------------------------------------------------------

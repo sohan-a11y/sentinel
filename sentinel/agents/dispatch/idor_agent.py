@@ -122,6 +122,10 @@ def run(
         payload={"count": len(llm_candidates), "candidates": llm_candidates},
     )
 
+    # Phase 0 is executing here: this whole agent is Tier B (it creates a real
+    # account and sends exploitative requests), so it is entirely gated on
+    # Phase 0's canary result — checked ONCE for the whole candidate loop
+    # below, not per-candidate, so a failed canary blocks every probe at once.
     tier_b_allowed = True
     try:
         guardrails.enforce_tier(ActionTier.TIER_B, scan_session.environment_tier)

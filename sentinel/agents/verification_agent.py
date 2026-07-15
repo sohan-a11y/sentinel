@@ -66,6 +66,10 @@ def _parse_evidence(poc_evidence: str) -> dict[str, str]:
 
 
 def _maybe_enforce_tier(finding: RawFinding, environment_tier: EnvironmentTier) -> None:
+    # Phase 0 is executing here: re-verifying a Tier B finding means re-probing
+    # the live target, so it's re-gated on the same Phase 0 canary result that
+    # gated the original detection — a session that lost VERIFIED_SAFE between
+    # dispatch and verification (e.g. downgraded mid-scan) can't re-probe either.
     if finding.get("tier") == "tier_b":
         guardrails.enforce_tier(ActionTier.TIER_B, environment_tier)
 

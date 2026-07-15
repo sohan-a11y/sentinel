@@ -27,6 +27,9 @@ def register_target(
     canary_check_url_template: str,
     canary_check_method: str = "GET",
 ) -> TargetRegistration:
+    # Phase 0 is executing here: creates the (still-unverified) registration
+    # row — the token and canary marker generated below are Phase 0's two
+    # gate artifacts, and nothing can scan this domain until they're proven.
     host = _normalize_host(domain)
     existing = db.query(TargetRegistration).filter(TargetRegistration.domain == host).one_or_none()
     if existing is not None and existing.is_active:
@@ -60,6 +63,8 @@ def register_target(
 
 
 def run_ownership_verification(db: Session, domain: str) -> TargetRegistration:
+    # Phase 0 is executing here: runs the live domain-ownership check
+    # (HTTP well-known / DNS TXT) and stamps the result onto the registration.
     host = _normalize_host(domain)
     registration = db.query(TargetRegistration).filter(TargetRegistration.domain == host).one_or_none()
     if registration is None:
@@ -87,6 +92,8 @@ def run_ownership_verification(db: Session, domain: str) -> TargetRegistration:
 
 
 def get_active_registration(db: Session, domain: str) -> TargetRegistration | None:
+    # Phase 0 is executing here: reads back the current registration/
+    # verification/canary state for a domain (used by the API status route).
     host = _normalize_host(domain)
     return (
         db.query(TargetRegistration)
@@ -96,6 +103,8 @@ def get_active_registration(db: Session, domain: str) -> TargetRegistration | No
 
 
 def deactivate_target(db: Session, domain: str) -> None:
+    # Phase 0 is executing here: revokes a domain's registration — after this,
+    # enforce_target_authorized will reject it again until re-registered.
     host = _normalize_host(domain)
     registration = db.query(TargetRegistration).filter(TargetRegistration.domain == host).one_or_none()
     if registration is None:
@@ -113,8 +122,12 @@ def start_scan_session(db: Session, domain: str) -> ScanSession:
     3. Stamp the resulting tier onto a brand-new ScanSession row.
     4. Audit-log both the authorization pass and the tier decision.
     """
+    # Phase 0 is executing here (step 1): re-checks domain-ownership
+    # authorization every single time a scan starts — not just at registration.
     registration = guardrails.enforce_target_authorized(db, domain)
 
+    # Phase 0 is executing here (step 2): re-runs the environment canary probe
+    # live, right now, for this session — never trusts a previous session's tier.
     tier = canary.determine_environment_tier(
         registration.canary_check_url_template,
         registration.canary_marker,
