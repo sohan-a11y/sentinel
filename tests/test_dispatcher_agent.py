@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
 
 from sentinel.agents import dispatcher_agent, kill_switch
-from sentinel.db.models import EnvironmentTier, ScanSession, ScanStatus, TargetRegistration
+from sentinel.config import settings
+from sentinel.control_plane import service
+from sentinel.db.models import ActionTier, EnvironmentTier, ScanSession, ScanStatus, TargetRegistration
 from sentinel.security.guardrails import ScanHaltedError
 
 
@@ -65,6 +67,34 @@ def test_runs_all_three_engines_and_collects_findings(db_session):
     m_nuclei.assert_called_once()
     m_zap.assert_called_once()
     m_idor.assert_called_once()
+
+
+def test_contract_run_blocks_all_scanner_engines(monkeypatch, db_session):
+    """recon.v1 is deliberately the only executable contract recipe."""
+    monkeypatch.setattr(settings, "control_plane_signing_key", "test-signing-key")
+    reg = _registration(db_session)
+    contract = service.create_scan_contract(
+        db_session,
+        registration=reg,
+        approved_by="approver@example.com",
+        allowed_tier=ActionTier.TIER_A,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    _, lease_token = service.issue_action_lease(
+        db_session, contract=contract, requested_tier=ActionTier.TIER_A
+    )
+    scan_session = _scan_session(db_session, reg)
+    service.activate_lease_for_scan(db_session, lease_token=lease_token, scan_session=scan_session)
+
+    with patch("sentinel.agents.dispatcher_agent.nuclei_wrapper.run") as m_nuclei, \
+         patch("sentinel.agents.dispatcher_agent.zap_wrapper.run") as m_zap, \
+         patch("sentinel.agents.dispatcher_agent.idor_agent.run") as m_idor:
+        findings = dispatcher_agent.run_all_engines(db_session, scan_session, reg, [], {})
+
+    assert findings == []
+    m_nuclei.assert_not_called()
+    m_zap.assert_not_called()
+    m_idor.assert_not_called()
 
 
 def test_stops_remaining_engines_when_scan_already_halted(db_session):

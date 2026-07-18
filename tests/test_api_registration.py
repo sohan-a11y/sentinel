@@ -18,6 +18,7 @@ app.include_router(registration.router)
 
 
 def _client(monkeypatch):
+    monkeypatch.setattr(settings, "api_key", "test-registration-api-key")
     engine = create_engine(
         "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
@@ -33,7 +34,7 @@ def _client(monkeypatch):
             db.close()
 
     app.dependency_overrides[deps.get_db] = override_get_db
-    return TestClient(app)
+    return TestClient(app, headers={"Authorization": "Bearer test-registration-api-key"})
 
 
 def test_register_returns_token_and_marker(monkeypatch):

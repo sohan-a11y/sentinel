@@ -35,8 +35,11 @@ def register_target(
     if existing is not None and existing.is_active:
         raise DomainAlreadyRegisteredError(f"'{host}' is already registered (id={existing.id})")
 
-    if "{marker}" not in canary_check_url_template:
-        raise ValueError("canary_check_url_template must contain the literal placeholder '{marker}'")
+    canary_method = canary.validate_canary_configuration(
+        host,
+        canary_check_url_template,
+        canary_check_method,
+    )
 
     registration = TargetRegistration(
         domain=host,
@@ -44,7 +47,7 @@ def register_target(
         verification_token=verification.generate_verification_token(),
         canary_marker=canary.generate_canary_marker(),
         canary_check_url_template=canary_check_url_template,
-        canary_check_method=canary_check_method.upper(),
+        canary_check_method=canary_method,
     )
     db.add(registration)
     db.flush()
@@ -62,7 +65,9 @@ def register_target(
     return registration
 
 
-def run_ownership_verification(db: Session, domain: str) -> TargetRegistration:
+def run_ownership_verification(
+    db: Session, domain: str, *, allow_dns_fallback: bool = True
+) -> TargetRegistration:
     # Phase 0 is executing here: runs the live domain-ownership check
     # (HTTP well-known / DNS TXT) and stamps the result onto the registration.
     host = _normalize_host(domain)
@@ -70,7 +75,11 @@ def run_ownership_verification(db: Session, domain: str) -> TargetRegistration:
     if registration is None:
         raise TargetNotRegisteredError(f"'{host}' has no registration record; call register_target() first")
 
-    method = verification.verify_domain_ownership(host, registration.verification_token)
+    method = verification.verify_domain_ownership(
+        host,
+        registration.verification_token,
+        allow_dns_fallback=allow_dns_fallback,
+    )
     from datetime import datetime, timezone
 
     passed = method is not None
@@ -111,6 +120,15 @@ def deactivate_target(db: Session, domain: str) -> None:
         return
     registration.is_active = False
     db.flush()
+    # A target deactivation revokes all of its contracts and immediately
+    # stops any bound runs. Import lazily to keep Phase 0 reusable on its own.
+    from sentinel.control_plane import service
+
+    service.revoke_contracts_for_target(
+        db,
+        target_id=registration.id,
+        reason="target registration deactivated",
+    )
     audit_record(db, agent="phase0.registry", action="target_deactivated", payload={"domain": host})
 
 

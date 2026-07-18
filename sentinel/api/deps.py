@@ -24,15 +24,28 @@ def get_db() -> Iterator[Session]:
 
 
 def require_api_key(authorization: str | None = Header(default=None)) -> None:
-    """No-op when SENTINEL_API_KEY isn't configured — permissive by default
-    for local/dev use, since Phase 0 was designed around registered domains
-    and never assumed a caller-identity layer on top. Every mutating route in
-    this API depends on this; setting the key is what actually binds a
-    caller to the domain they registered for any deployment reachable by
-    anyone else (closes an OWASP A01 gap: Phase 0 verifies domain ownership,
-    never requester identity)."""
+    """Fail closed when the API has no configured operator credential.
+
+    Phase 0 proves control of a domain, not the identity of an API caller.
+    Leaving this optional would make a network-reachable deployment an
+    anonymous origin-verification and scan-control service.  A single API
+    key is intentionally only an MVP operator boundary; tenant- and
+    asset-scoped identity remains a production prerequisite.
+    """
     if not settings.api_key:
-        return
+        raise HTTPException(
+            status_code=503,
+            detail="SENTINEL_API_KEY must be configured before the API can be used",
+        )
     expected = f"Bearer {settings.api_key}"
     if not authorization or not hmac.compare_digest(authorization, expected):
         raise HTTPException(status_code=401, detail="Missing or invalid API key")
+
+
+def require_configured_api_key(authorization: str | None = Header(default=None)) -> None:
+    """Compatibility dependency for contract routes.
+
+    Every routed API now uses the same fail-closed key check; retaining this
+    name makes the stricter contract boundary explicit at its call sites.
+    """
+    require_api_key(authorization)

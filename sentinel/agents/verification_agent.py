@@ -198,6 +198,22 @@ _VERIFIER_STRATEGIES: dict[str, Verifier] = {
 
 def verify_findings(db: Session, scan_session: ScanSession, raw_findings: list[RawFinding]) -> list[VerifiedFinding]:
     guardrails.enforce_not_halted(db, scan_session)
+    if scan_session.contract_id is not None:
+        # Contract runs are recon.v1 only. Never add a live reprobe just
+        # because an upstream bug unexpectedly supplied raw findings.
+        if raw_findings:
+            audit_log.record(
+                db,
+                agent=AGENT_NAME,
+                action="contract_recipe_verification_blocked",
+                payload={
+                    "scan_session_id": scan_session.id,
+                    "contract_id": scan_session.contract_id,
+                    "raw_finding_count": len(raw_findings),
+                    "reason": "recon.v1 permits no live verification requests",
+                },
+            )
+        return []
     registration = scan_session.target
     environment_tier = scan_session.environment_tier
 
@@ -207,6 +223,12 @@ def verify_findings(db: Session, scan_session: ScanSession, raw_findings: list[R
         detection_method = raw.get("detection_method", "")
         verifier = _VERIFIER_STRATEGIES.get(detection_method, _verify_unknown)
 
+        from sentinel.security.guardrails import (
+            PivotViolationError,
+            TierViolationError,
+            UnauthorizedTargetError,
+            DemonstrationBudgetExceededError,
+        )
         try:
             status, method, note = verifier(raw, registration, environment_tier)
         except httpx.HTTPError as exc:
@@ -214,6 +236,12 @@ def verify_findings(db: Session, scan_session: ScanSession, raw_findings: list[R
                 "unconfirmed",
                 f"{detection_method or 'unknown'}_network_error",
                 f"re-verification request raised {type(exc).__name__}: {exc}",
+            )
+        except (PivotViolationError, TierViolationError, UnauthorizedTargetError, DemonstrationBudgetExceededError) as exc:
+            status, method, note = (
+                "unconfirmed",
+                f"{detection_method or 'unknown'}_guardrail_violation",
+                f"re-verification skipped: {exc}",
             )
 
         confidence = raw.get("confidence", 0.5)

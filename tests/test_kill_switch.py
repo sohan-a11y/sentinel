@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import itertools
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 
@@ -115,6 +116,22 @@ class TestTriggerHalt:
         registry = kill_switch.HaltRegistry()
         with pytest.raises(ValueError):
             registry.trigger_halt(db_session, 999_999_999, "nope")
+
+    def test_halt_revokes_any_bound_action_lease(self, db_session):
+        session_id = _next_session_id()
+        scan_session = _make_scan_session(db_session, session_id)
+        # A non-null binding is enough to verify the control-plane handoff;
+        # the lease service owns the precise lookup/revocation behavior.
+        scan_session.contract_id = 123
+        db_session.flush()
+
+        registry = kill_switch.HaltRegistry()
+        with patch("sentinel.control_plane.service.revoke_lease_for_scan") as revoke_lease:
+            registry.trigger_halt(db_session, session_id, "operator stop")
+
+        revoke_lease.assert_called_once()
+        assert revoke_lease.call_args.kwargs["scan_session"].id == session_id
+        assert revoke_lease.call_args.kwargs["reason"] == "operator stop"
 
 
 class TestIsHalted:

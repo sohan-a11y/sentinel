@@ -49,6 +49,23 @@ class TestRequestSameHost:
         with pytest.raises(PivotViolationError):
             safe_http.get_same_host("https://example.com/old", "example.com")
 
+    @pytest.mark.parametrize(
+        "redirect_target",
+        [
+            "http://example.com/downgraded",
+            "https://example.com:8443/alternate-port",
+        ],
+    )
+    @respx.mock
+    def test_blocks_same_host_redirect_that_changes_origin(self, redirect_target):
+        respx.get("https://example.com/old").mock(
+            return_value=httpx.Response(302, headers={"location": redirect_target})
+        )
+        respx.get(redirect_target).mock(return_value=httpx.Response(200, text="should-not-be-requested"))
+
+        with pytest.raises(PivotViolationError):
+            safe_http.get_same_host("https://example.com/old", "example.com")
+
     @respx.mock
     def test_caps_redirect_chain_length(self):
         for i in range(10):

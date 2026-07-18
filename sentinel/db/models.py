@@ -55,6 +55,20 @@ class ActionTier(str, enum.Enum):
     TIER_B = "tier_b"  # destructive / exploitative
 
 
+class ScanContractStatus(str, enum.Enum):
+    ACTIVE = "active"
+    REVOKED = "revoked"
+    EXPIRED = "expired"
+
+
+class ActionLeaseStatus(str, enum.Enum):
+    ISSUED = "issued"
+    ACTIVE = "active"
+    REVOKED = "revoked"
+    EXPIRED = "expired"
+    COMPLETED = "completed"
+
+
 class FindingStatus(str, enum.Enum):
     CONFIRMED = "confirmed"
     UNCONFIRMED = "unconfirmed"  # failed re-verification — needs human review
@@ -139,10 +153,16 @@ class ScanSession(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     target_id: Mapped[int] = mapped_column(ForeignKey("target_registrations.id"), nullable=False)
+    # Contract-backed runs carry an immutable policy binding. Legacy historical
+    # sessions may remain null so existing reports stay readable.
+    contract_id: Mapped[int | None] = mapped_column(ForeignKey("scan_contracts.id"), nullable=True, index=True)
     status: Mapped[ScanStatus] = mapped_column(Enum(ScanStatus), default=ScanStatus.RUNNING)
 
     # Stamped fresh every session by phase0.canary — never inherited/cached
     environment_tier: Mapped[EnvironmentTier] = mapped_column(Enum(EnvironmentTier), default=EnvironmentTier.UNVERIFIED)
+    # Stamped from the approved contract at run creation. A null value means
+    # a pre-contract historical/internal session, not "Tier B allowed".
+    permitted_action_tier: Mapped[ActionTier | None] = mapped_column(Enum(ActionTier), nullable=True)
 
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -155,6 +175,86 @@ class ScanSession(Base):
     target: Mapped["TargetRegistration"] = relationship(back_populates="scan_sessions")
     findings: Mapped[list["Finding"]] = relationship(back_populates="scan_session")
     cwe_applicability: Mapped[list["CweApplicability"]] = relationship(back_populates="scan_session")
+
+
+class ScanContract(Base):
+    """Immutable, signed Tier-A policy for a verified target.
+
+    The signed fields are deliberately narrow in this first vertical slice:
+    one target, one maximum action tier, a request budget, a scan-session
+    budget, and a validity window. Higher-risk scope features belong in a
+    later versioned manifest rather than silently broadening this record.
+    """
+
+    __tablename__ = "scan_contracts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    target_id: Mapped[int] = mapped_column(ForeignKey("target_registrations.id"), nullable=False, index=True)
+    approved_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    # A keyed digest of the customer's out-of-band authorization reference
+    # (for example, an official-email ticket ID).  The email/body/reference
+    # itself is intentionally never stored in this service.
+    customer_authorization_reference_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    allowed_tier: Mapped[ActionTier] = mapped_column(Enum(ActionTier), nullable=False)
+    not_before: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    max_scan_sessions: Mapped[int] = mapped_column(Integer, nullable=False)
+    issued_lease_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    max_requests: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[ScanContractStatus] = mapped_column(
+        Enum(ScanContractStatus), default=ScanContractStatus.ACTIVE, nullable=False
+    )
+    revocation_epoch: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    policy_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_signature: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ActionLease(Base):
+    """Short-lived internal execution authority for exactly one scan session.
+
+    Only a SHA-256 digest of the high-entropy opaque token is stored. The raw
+    token is transient control-plane data and must never be audited or sent to
+    the public API.
+    """
+
+    __tablename__ = "action_leases"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    contract_id: Mapped[int] = mapped_column(ForeignKey("scan_contracts.id"), nullable=False, index=True)
+    scan_session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("scan_sessions.id"), nullable=True, unique=True, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    requested_tier: Mapped[ActionTier] = mapped_column(Enum(ActionTier), nullable=False)
+    max_requests: Mapped[int] = mapped_column(Integer, nullable=False)
+    requests_used: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    revocation_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[ActionLeaseStatus] = mapped_column(
+        Enum(ActionLeaseStatus), default=ActionLeaseStatus.ISSUED, nullable=False
+    )
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    terminal_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    terminal_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class LeaseAction(Base):
+    """Auditable reservation made immediately before a contract-run request."""
+
+    __tablename__ = "lease_actions"
+    __table_args__ = (UniqueConstraint("lease_id", "request_fingerprint", name="uq_lease_request_fingerprint"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    lease_id: Mapped[str] = mapped_column(ForeignKey("action_leases.id"), nullable=False, index=True)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class CweApplicability(Base):

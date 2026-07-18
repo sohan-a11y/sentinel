@@ -14,6 +14,7 @@ from sentinel.agents.cwe_mapping_agent import (
 )
 from sentinel.cwe.mapping import load_cwe_catalog
 from sentinel.db.models import CweApplicability, ScanSession, ScanStatus, TargetRegistration
+from sentinel.config import settings
 from sentinel.llm.client import LlmConfigurationError
 
 CWE_ID_PATTERN = re.compile(r"^CWE-\d+$")
@@ -243,6 +244,29 @@ class TestLlmPassUnavailableFallback:
         by_id = {item["cwe_id"]: item for item in items}
         assert by_id["CWE-840"]["applicable"] is True  # failed batch -> fallback default
         assert by_id["CWE-841"]["applicable"] is False  # succeeding batch -> real verdict preserved
+
+    def test_ai_judgment_cap_keeps_the_demo_fast_and_marks_unreviewed_items(self, monkeypatch):
+        calls: list[list[str]] = []
+
+        class _FakeClient:
+            def complete_json(self, *, system, user, json_schema, schema_name):
+                calls.append(["called"])
+                return {"verdicts": [{"cwe_id": "CWE-840", "applicable": False, "reason": "AI preview"}]}
+
+        monkeypatch.setattr(cwe_mapping_agent, "get_llm_client", lambda: _FakeClient())
+        monkeypatch.setattr(settings, "llm_max_cwe_judgments", 1)
+        undecided = [
+            {"cwe_id": "CWE-840", "name": "Business Logic Errors", "category": "business_logic"},
+            {"cwe_id": "CWE-841", "name": "Improper Workflow Enforcement", "category": "business_logic"},
+        ]
+
+        items, llm_available = apply_llm_pass(undecided, {})
+
+        by_id = {item["cwe_id"]: item for item in items}
+        assert llm_available is True
+        assert len(calls) == 1
+        assert by_id["CWE-840"]["reason"] == "AI preview"
+        assert "AI judgment cap" in by_id["CWE-841"]["reason"]
 
 
 @contextlib.contextmanager

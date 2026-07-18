@@ -121,6 +121,7 @@ def run(
             command,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=settings.nuclei_timeout_seconds,
             check=False,
         )

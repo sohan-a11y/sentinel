@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from xml.sax.saxutils import escape as _xml_escape
 
+from sqlalchemy import update
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
@@ -275,6 +276,8 @@ def export_pdf(db: Session, scan_session_id: int, output_path: str) -> None:
 
 def report_node(state: SentinelState) -> dict:
     scan_session_id = state["scan_session_id"]
+    from datetime import datetime, timezone
+    from sentinel.db.models import ScanStatus
     with get_session() as db:
         summary = build_summary(db, scan_session_id)
         audit_log.record(
@@ -283,4 +286,23 @@ def report_node(state: SentinelState) -> dict:
             action="report_summary_built",
             payload={"scan_session_id": scan_session_id, "headline": summary["headline"]},
         )
+        # Compare-and-set prevents a report thread holding an old RUNNING
+        # object from overwriting a concurrent manual halt, revocation, or
+        # execution failure with COMPLETED.
+        transitioned = db.execute(
+            update(ScanSession)
+            .where(
+                ScanSession.id == scan_session_id,
+                ScanSession.status == ScanStatus.RUNNING,
+            )
+            .values(status=ScanStatus.COMPLETED, ended_at=datetime.now(timezone.utc))
+        ).rowcount
+        if transitioned:
+            db.flush()
+            scan_session = db.get(ScanSession, scan_session_id)
+            if scan_session is not None:
+                db.refresh(scan_session)
+                from sentinel.control_plane import service
+
+                service.complete_lease_for_scan(db, scan_session=scan_session)
     return {"current_phase": "report_complete"}

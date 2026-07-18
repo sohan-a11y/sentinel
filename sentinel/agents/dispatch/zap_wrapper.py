@@ -80,9 +80,9 @@ def _run_spider_phase(
     audit_log.record(db, agent=AGENT_NAME, action="zap_spider_started", payload={"target_url": target_url})
     resp = client.get(_url("/JSON/spider/action/scan/"), params=_api_params({"url": target_url}))
     resp.raise_for_status()
-    scan_id = str(resp.json()["scanId"])
+    scan_id = str(resp.json().get("scan") or resp.json().get("scanId") or "0")
     final_status = _poll_until_complete(
-        client, db, "/JSON/spider/status/", scan_id, settings.zap_spider_timeout_seconds, scan_session
+        client, db, "/JSON/spider/view/status/", scan_id, settings.zap_spider_timeout_seconds, scan_session
     )
     audit_log.record(
         db,
@@ -98,9 +98,9 @@ def _run_ascan_phase(
     audit_log.record(db, agent=AGENT_NAME, action="zap_ascan_started", payload={"target_url": target_url})
     resp = client.get(_url("/JSON/ascan/action/scan/"), params=_api_params({"url": target_url}))
     resp.raise_for_status()
-    scan_id = str(resp.json()["scanId"])
+    scan_id = str(resp.json().get("scan") or resp.json().get("scanId") or "0")
     final_status = _poll_until_complete(
-        client, db, "/JSON/ascan/status/", scan_id, settings.zap_ascan_timeout_seconds, scan_session
+        client, db, "/JSON/ascan/view/status/", scan_id, settings.zap_ascan_timeout_seconds, scan_session
     )
     audit_log.record(
         db,

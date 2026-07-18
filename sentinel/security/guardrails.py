@@ -153,13 +153,23 @@ def enforce_not_halted(db: Session, scan_session: ScanSession) -> None:
     prefer Postgres, where READ COMMITTED guarantees a fresh SELECT always
     sees prior commits.)
     """
-    db.refresh(scan_session, attribute_names=["status", "halted_reason"])
+    db.refresh(
+        scan_session,
+        attribute_names=["status", "halted_reason", "contract_id", "permitted_action_tier"],
+    )
     if scan_session.status == ScanStatus.HALTED:
         raise ScanHaltedError(
             f"Scan session {scan_session.id} was halted"
             + (f" ({scan_session.halted_reason})" if scan_session.halted_reason else "")
             + " — no further dispatch calls are permitted for this session."
         )
+    # Contract-backed scans have a second, time-bounded authority check.
+    # Import lazily so the policy service can itself use this module's
+    # URL-normalization boundary without a module-load cycle.
+    if scan_session.contract_id is not None:
+        from sentinel.control_plane import service
+
+        service.enforce_lease_active_for_scan(db, scan_session)
 
 
 def enforce_demonstration_budget(

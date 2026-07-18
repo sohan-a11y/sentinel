@@ -36,12 +36,11 @@ def _client():
     return TestClient(app)
 
 
-def test_no_api_key_configured_allows_requests_through(monkeypatch):
+def test_no_api_key_configured_fails_closed(monkeypatch):
     monkeypatch.setattr(settings, "api_key", None)
     client = _client()
     response = client.get("/api/targets/never-registered.com")
-    # 404 (not "not registered"), not 401 — proves the auth layer let it through
-    assert response.status_code == 404
+    assert response.status_code == 503
 
 
 def test_api_key_configured_rejects_missing_header(monkeypatch):

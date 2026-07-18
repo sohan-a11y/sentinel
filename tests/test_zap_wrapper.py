@@ -13,9 +13,9 @@ from sentinel.db.models import EnvironmentTier, ScanSession, ScanStatus, TargetR
 ZAP_BASE = settings.zap_api_url
 
 SPIDER_SCAN_URL = f"{ZAP_BASE}/JSON/spider/action/scan/"
-SPIDER_STATUS_URL = f"{ZAP_BASE}/JSON/spider/status/"
+SPIDER_STATUS_URL = f"{ZAP_BASE}/JSON/spider/view/status/"
 ASCAN_SCAN_URL = f"{ZAP_BASE}/JSON/ascan/action/scan/"
-ASCAN_STATUS_URL = f"{ZAP_BASE}/JSON/ascan/status/"
+ASCAN_STATUS_URL = f"{ZAP_BASE}/JSON/ascan/view/status/"
 ALERTS_URL = f"{ZAP_BASE}/JSON/core/view/alerts/"
 
 
@@ -59,9 +59,9 @@ class TestZapWrapperFullHappyPath:
         scan_session = _scan_session(db_session, reg, environment_tier=EnvironmentTier.VERIFIED_SAFE)
         cwe_items = _cwe_items()
 
-        respx.get(SPIDER_SCAN_URL).mock(return_value=httpx.Response(200, json={"scanId": "1"}))
+        respx.get(SPIDER_SCAN_URL).mock(return_value=httpx.Response(200, json={"scan": "1"}))
         respx.get(SPIDER_STATUS_URL).mock(return_value=httpx.Response(200, json={"status": "100"}))
-        respx.get(ASCAN_SCAN_URL).mock(return_value=httpx.Response(200, json={"scanId": "2"}))
+        respx.get(ASCAN_SCAN_URL).mock(return_value=httpx.Response(200, json={"scan": "2"}))
         respx.get(ASCAN_STATUS_URL).mock(return_value=httpx.Response(200, json={"status": "100"}))
 
         passive_alerts = {
@@ -131,7 +131,7 @@ class TestZapWrapperUnmappedCwe:
         scan_session = _scan_session(db_session, reg, environment_tier=EnvironmentTier.UNVERIFIED)
         cwe_items = _cwe_items()
 
-        respx.get(SPIDER_SCAN_URL).mock(return_value=httpx.Response(200, json={"scanId": "1"}))
+        respx.get(SPIDER_SCAN_URL).mock(return_value=httpx.Response(200, json={"scan": "1"}))
         respx.get(SPIDER_STATUS_URL).mock(return_value=httpx.Response(200, json={"status": "100"}))
 
         alerts_with_unmapped = {
@@ -178,9 +178,9 @@ class TestZapWrapperTierBSkipped:
         scan_session = _scan_session(db_session, reg, environment_tier=EnvironmentTier.UNVERIFIED)
         cwe_items = _cwe_items()
 
-        respx.get(SPIDER_SCAN_URL).mock(return_value=httpx.Response(200, json={"scanId": "1"}))
+        respx.get(SPIDER_SCAN_URL).mock(return_value=httpx.Response(200, json={"scan": "1"}))
         respx.get(SPIDER_STATUS_URL).mock(return_value=httpx.Response(200, json={"status": "100"}))
-        ascan_scan_route = respx.get(ASCAN_SCAN_URL).mock(return_value=httpx.Response(200, json={"scanId": "2"}))
+        ascan_scan_route = respx.get(ASCAN_SCAN_URL).mock(return_value=httpx.Response(200, json={"scan": "2"}))
         ascan_status_route = respx.get(ASCAN_STATUS_URL).mock(return_value=httpx.Response(200, json={"status": "100"}))
 
         passive_alerts = {
@@ -238,7 +238,7 @@ class TestZapWrapperUnreachable:
         scan_session = _scan_session(db_session, reg, environment_tier=EnvironmentTier.VERIFIED_SAFE)
         cwe_items = _cwe_items()
 
-        respx.get(SPIDER_SCAN_URL).mock(return_value=httpx.Response(200, json={"scanId": "1"}))
+        respx.get(SPIDER_SCAN_URL).mock(return_value=httpx.Response(200, json={"scan": "1"}))
         respx.get(SPIDER_STATUS_URL).mock(return_value=httpx.Response(200, json={"status": "100"}))
         passive_alerts = {
             "alerts": [

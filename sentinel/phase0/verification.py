@@ -35,7 +35,7 @@ def _well_known_url(domain: str) -> str:
 
 def check_well_known(domain: str, token: str) -> bool:
     """Fails closed on a redirect to a different host, too: safe_http.get_same_host
-    re-validates every hop against `domain` rather than trusting httpx's
+    re-validates every hop against the requested domain rather than trusting httpx's
     follow_redirects to land somewhere still worth trusting."""
     # Phase 0 is executing here: HTTP method of domain-ownership verification —
     # live-fetches the well-known token file and checks the token is present.
@@ -74,12 +74,20 @@ def check_dns_txt(domain: str, token: str) -> bool:
     return False
 
 
-def verify_domain_ownership(domain: str, token: str) -> VerificationMethod | None:
-    """Try both methods. Returns the method that passed, or None if neither did."""
+def verify_domain_ownership(
+    domain: str, token: str, *, allow_dns_fallback: bool = True
+) -> VerificationMethod | None:
+    """Verify ownership, optionally failing closed after the HTTPS proof.
+
+    The normal customer flow tries DNS only after the HTTPS proof fails.
+    A loopback-only caller can set ``allow_dns_fallback=False`` so a failed
+    local proof cannot accidentally result in a resolver request outside the
+    local machine.  Disabling a fallback only makes verification stricter.
+    """
     # Phase 0 is executing here: orchestrates domain-ownership verification —
     # tries the HTTP well-known method first, then falls back to DNS TXT.
     if check_well_known(domain, token):
         return VerificationMethod.WELL_KNOWN_HTTP
-    if check_dns_txt(domain, token):
+    if allow_dns_fallback and check_dns_txt(domain, token):
         return VerificationMethod.DNS_TXT
     return None

@@ -14,7 +14,7 @@ import uuid
 from collections import deque
 from datetime import datetime, timezone
 from html.parser import HTMLParser
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import parse_qs, urljoin, urlparse
 
 import httpx
@@ -119,11 +119,20 @@ class Crawler:
     goes through _get(), so the rate limit and page cap apply uniformly.
     """
 
-    def __init__(self, registration: TargetRegistration, client: httpx.Client | None = None) -> None:
+    def __init__(
+        self,
+        registration: TargetRegistration,
+        client: httpx.Client | None = None,
+        *,
+        before_request: Callable[[str], None] | None = None,
+    ) -> None:
         self.registration = registration
         self.target_host = normalize_host(registration.domain)
         self._owns_client = client is None
         self.client = client or httpx.Client(timeout=10.0, follow_redirects=False)
+        # Contract-run callers supply this guard. It atomically reserves
+        # policy budget immediately before each actual target request.
+        self._before_request = before_request
 
         self.visited: set[str] = set()
         self.external_links_seen: list[str] = []
@@ -183,6 +192,8 @@ class Crawler:
 
     def _get(self, url: str) -> httpx.Response | None:
         self._throttle()
+        if self._before_request is not None:
+            self._before_request(url)
         try:
             return self.client.get(url)
         except httpx.HTTPError:
@@ -347,33 +358,82 @@ class Crawler:
 
 def recon_node(state: SentinelState) -> dict:
     domain = state["target_domain"]
+    scan_session_id = state.get("scan_session_id")
+
+    # Do only setup/audit work in this short transaction. Holding a lease-row
+    # update open for a whole crawl would block a manual halt or revocation
+    # in another request, precisely when it needs to take effect.
     with get_session() as db:
         # Phase 0 is executing here: Agent 1 (recon) cannot crawl a single
         # page until enforce_target_authorized confirms this domain is
         # registered and ownership-verified.
         registration = guardrails.enforce_target_authorized(db, domain)
-        scan_session_id = state.get("scan_session_id")
-        if scan_session_id is not None:
-            scan_session = db.get(ScanSession, scan_session_id)
-            if scan_session is not None:
-                guardrails.enforce_not_halted(db, scan_session)
+        if scan_session_id is None:
+            raise ValueError("Recon requires a contract-bound ScanSession")
+        scan_session = db.get(ScanSession, scan_session_id)
+        if scan_session is None:
+            raise ValueError(f"ScanSession {scan_session_id} does not exist")
+        if scan_session.contract_id is None:
+            raise ValueError("Recon refuses an unbound legacy ScanSession")
+        if scan_session.target_id != registration.id:
+            raise ValueError("Recon target does not match its contract-bound ScanSession")
+        guardrails.enforce_not_halted(db, scan_session)
         audit_log.record(
             db,
             agent="recon_agent",
             action="crawl_started",
             payload={"domain": registration.domain},
         )
-        crawler = Crawler(registration)
-        try:
-            site_map = crawler.crawl()
-        finally:
-            crawler.close()
+        # The crawler deliberately runs outside this transaction. Preserve
+        # its already-loaded scalar configuration without allowing a detached
+        # ORM refresh to reopen the long-lived session.
+        registration_domain = registration.domain
+        db.expunge(registration)
+
+    def request_guard(url: str) -> None:
+        """A fresh, committed policy decision for every target request."""
+        with get_session() as action_db:
+            action_session = action_db.get(ScanSession, scan_session_id)
+            if action_session is None:
+                raise ValueError(f"ScanSession {scan_session_id} does not exist")
+            guardrails.enforce_not_halted(action_db, action_session)
+            # Import lazily to keep recon and the control plane independent
+            # at module load. The lease is never placed in graph state or
+            # exposed to the caller.
+            from sentinel.control_plane import service
+
+            service.reserve_recon_request(
+                action_db,
+                scan_session=action_session,
+                request_url=url,
+            )
+
+    crawler = Crawler(registration, before_request=request_guard)
+    try:
+        site_map = crawler.crawl()
+    except Exception as exc:
+        with get_session() as db:
+            audit_log.record(
+                db,
+                agent="recon_agent",
+                action="crawl_interrupted",
+                payload={
+                    "domain": registration_domain,
+                    "pages_crawled": len(crawler.visited),
+                    "error_type": type(exc).__name__,
+                },
+            )
+        raise
+    finally:
+        crawler.close()
+
+    with get_session() as db:
         audit_log.record(
             db,
             agent="recon_agent",
             action="crawl_completed",
             payload={
-                "domain": registration.domain,
+                "domain": registration_domain,
                 "pages_crawled": len(crawler.visited),
                 "external_links_seen_count": len(crawler.external_links_seen),
                 "external_links_seen_sample": crawler.external_links_seen[:10],

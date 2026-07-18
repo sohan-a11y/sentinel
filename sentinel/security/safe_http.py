@@ -16,7 +16,7 @@ first, and never delegates redirect-following to httpx itself.
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -26,17 +26,39 @@ _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _MAX_REDIRECTS = 5
 
 
+def _origin(url: str) -> tuple[str, str, int]:
+    """Return a canonical HTTP(S) origin, or reject malformed/unsafe URLs."""
+    parsed = urlparse(url)
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"} or not parsed.hostname:
+        raise PivotViolationError(f"Refusing malformed or non-HTTP(S) URL '{url}'")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise PivotViolationError(f"Refusing URL with invalid port '{url}'") from exc
+    return scheme, normalize_host(parsed.hostname), port or (443 if scheme == "https" else 80)
+
+
 def request_same_host(method: str, url: str, expected_host: str, **kwargs: Any) -> httpx.Response:
     """Like httpx.request(..., follow_redirects=True), except every hop
-    (including the first request) must resolve to expected_host or this
-    raises PivotViolationError instead of silently following elsewhere."""
+    (including the first request) must resolve to expected_host and stay on
+    the initial scheme/host/port origin. This prevents a redirect from
+    silently downgrading HTTPS or jumping to an unapproved service port."""
     kwargs.pop("follow_redirects", None)
     current_url = url
+    expected_origin = _origin(url)
+    normalized_expected_host = normalize_host(expected_host)
     for _ in range(_MAX_REDIRECTS + 1):
-        if normalize_host(current_url) != normalize_host(expected_host):
+        current_origin = _origin(current_url)
+        if current_origin[1] != normalized_expected_host:
             raise PivotViolationError(
                 f"Refusing to follow request to '{current_url}' — resolved host does not match "
                 f"expected target '{expected_host}'"
+            )
+        if current_origin != expected_origin:
+            raise PivotViolationError(
+                f"Refusing to follow request to '{current_url}' — origin changed from "
+                f"'{expected_origin[0]}://{expected_origin[1]}:{expected_origin[2]}'"
             )
         response = httpx.request(method, current_url, follow_redirects=False, **kwargs)
         if response.status_code not in _REDIRECT_STATUSES or "location" not in response.headers:

@@ -1,13 +1,50 @@
 # Sentinel
 
-Autonomous, multi-agent CWE-coverage pentesting platform. Sentinel scans domains a company
-already owns and has cryptographically proven ownership of — never anything else — and reports
-exactly how much of the web-relevant CWE catalog it tested, what it confirmed, and what needs a
-human look.
+Sentinel is a prototype authorization control plane and multi-agent web-security research
+platform. Its only supported public execution path is a bounded, signed contract run against a
+previously verified domain. That path currently performs recon only; the broader scanner modules
+in this repository are not approved for unattended customer use.
 
-**Sentinel runs unattended once a scan starts.** No agent asks a human to approve an individual
-request. What makes that safe to say is not a prompt telling the LLM to behave — it's that every
-scan action passes through two files that are plain Python, not English:
+**Project demo environment:** Sentinel is currently **CLI-first**. Double-click
+[`Start Sentinel Demo.cmd`](Start%20Sentinel%20Demo.cmd) to run a guided, local-only demo. The
+CLI is the operator experience for this MVP; FastAPI is the control-plane/integration engine behind
+it, and the Streamlit screen is an optional developer dashboard rather than the customer workflow.
+For a real, opt-in AI preview, configure a freshly issued TokenRouter key in your local `.env` and
+double-click [`Start Sentinel AI Demo.cmd`](Start%20Sentinel%20AI%20Demo.cmd). It sends only the
+disposable local demo's site map to TokenRouter; it never sends a customer target, credential, or
+request body. The CLI labels AI output as triage—not a confirmed vulnerability.
+
+For the enterprise product direction, execution boundaries, and phased path to safe continuous
+validation, see [the Authorization and Safety Control Plane](docs/product/authorization-control-plane.md).
+For the customer-held-data model, the implemented signed-permit foundation, and the controls still
+required before active testing, see the [Zero-Trust Customer-Hosted Runner guide](docs/product/zero-trust-customer-runner.md).
+For a nontechnical, business-ready architecture and operating model, see the
+[Business Architecture](docs/product/business-architecture.md).
+For a safe, local-only recording setup, use the [Local Demo Runbook](docs/product/local-demo-runbook.md)
+and its companion [Demo Video Script](docs/product/demo-video-script.md).
+
+**Current automation boundary:** a signed contract run is unattended **recon only**. No agent
+asks a human to approve an individual recon request, but every request spends a short-lived
+internal lease immediately before it leaves the process. Nuclei, ZAP, IDOR, and live verification
+are intentionally blocked for contract runs until they can be forced through a mandatory egress
+proxy.
+
+**Production status: do not expose this MVP to customers, an untrusted network, or production
+targets.** A customer-ready release needs tenant-scoped identity and authorization, an
+independently authenticated approval workflow, a mandatory DNS/IP-aware egress proxy with no
+direct runner network path, and PostgreSQL-backed durable jobs/workers with distributed locking.
+The current shared API key is only a deployment gate, and `approved_by` is an operator-supplied
+label — neither establishes who approved a contract nor provides tenant isolation. The HMAC
+protects immutable policy scope, not arbitrary database lifecycle writes, so this MVP also assumes
+the database is trusted.
+
+The repository also includes a **local signed-permit and evidence-redaction foundation** for a
+future customer-hosted runner. It is not an active-scanning route: the current permit API is
+operator-only and uses the same shared MVP API key, so a customer runner must never receive that
+key. The local facade cannot prevent a scanner from bypassing it; active engines remain blocked
+until customer-runner enrollment, mTLS, durable revocation, and a mandatory egress boundary exist.
+
+That boundary is code, not a prompt telling the LLM to behave:
 
 - [`sentinel/security/guardrails.py`](sentinel/security/guardrails.py) — hard boundaries. Every
   dispatch call starts with `enforce_target_authorized`, `enforce_tier`, `enforce_no_pivot`, or
@@ -78,31 +115,38 @@ target to independently re-check findings, so running it after a halt would viol
 supposed to respect. Raw findings from before the halt are kept and demoted to `unconfirmed`
 rather than lost.
 
-## Why this is safe to run unattended
+The diagram describes the repository's broader agent graph. A contract-started run is restricted
+to `recon.v1`: it may collect same-origin HTTPS metadata and produce coverage/reporting state, but
+it does not send Nuclei, ZAP, IDOR, or verification traffic.
+
+## What the current MVP enforces
 
 | Boundary | Enforced by | What happens if violated |
 |---|---|---|
 | Scan only registered, ownership-verified domains | `guardrails.enforce_target_authorized` reading `target_registrations` | `UnauthorizedTargetError`, scan action never sent |
-| No pivoting to hosts discovered during recon | `guardrails.enforce_no_pivot`, called before every request in nuclei/zap/idor wrappers | `PivotViolationError` |
-| No pivoting via a redirect either | `sentinel/security/safe_http.py` — manually walks redirect chains, re-validating the host at every hop, instead of letting httpx follow `Location` headers unchecked | `PivotViolationError`, and cookies attached to the original request are never resent to the redirect target |
-| Only http/https URLs are ever treated as "the same host" | `guardrails.normalize_host` rejects `file://`, `ftp://`, etc. outright rather than extracting a same-looking hostname from them | `PivotViolationError` |
-| Destructive (Tier B) tests only in a proven-safe environment | `guardrails.enforce_tier`, gated on a **live** canary probe re-run every session (never cached) | `TierViolationError`, session silently downgraded to Tier A |
-| No mass account creation, ever, for a given target | `guardrails.enforce_demonstration_budget` — a **persistent, cross-session** counter on the target's own DB row, not a per-call argument a new scan session could reset | `DemonstrationBudgetExceededError` |
+| Contract recon cannot follow a discovered off-origin link or use a non-HTTPS target URL | `recon_agent` plus `control_plane.reserve_recon_request` | Link is recorded or the request is rejected before egress |
+| Contract runs cannot enable Tier B, Nuclei, ZAP, IDOR, or live verification | Tier-A-only contract validation plus dispatcher/verification guards | Contract policy error or an empty, audited engine result; no scanner request is sent |
 | A halted scan cannot keep dispatching, even from a different thread/session | `guardrails.enforce_not_halted` re-reads the DB (`db.refresh`) on every check rather than trusting a possibly-stale in-memory flag | `ScanHaltedError` |
-| Every decision is attributable and tamper-evident | `sentinel.security.audit_log` — hash-chained (HMAC-SHA256 when `SENTINEL_AUDIT_LOG_HMAC_KEY` is set), written to DB + an append-only NDJSON file | `audit_log.verify_chain()` detects any retroactive edit |
-| Only the domain's own registrant can start/halt/deregister its scans | `sentinel.api.deps.require_api_key` on every mutating route | `401` without `Authorization: Bearer <SENTINEL_API_KEY>` |
+| Contract policy and execution decisions are recorded | HMAC-signed contract policy plus a hash-chained audit log | Contract integrity failure blocks execution; audit verification checks chain continuity. Configure `SENTINEL_AUDIT_LOG_HMAC_KEY` to resist a database writer recomputing the chain |
+| All `/api` routes require a configured shared API key | `sentinel.api.deps.require_api_key` | `503` if `SENTINEL_API_KEY` is unset; `401` for a missing/invalid bearer token |
+| Contract-backed execution requires an independent signing key | `sentinel.control_plane.service` verifies an HMAC-signed policy | Contract creation or execution fails closed if `SENTINEL_CONTROL_PLANE_SIGNING_KEY` is unset or the policy integrity check fails |
 
 None of this is "ask the LLM nicely." `tests/test_guardrails.py::test_no_scan_flag_or_config_can_bypass_this`
 asserts, by inspecting function signatures, that no `enforce_*` function even accepts a
 force/override/skip parameter.
+
+The shared API key is not tenant identity, and it does not make `approved_by` an independently
+authenticated approval. `/api` routes fail closed without the key, but a single global credential
+cannot provide per-organization or per-asset authorization. URL checks and per-request leases are
+also not a substitute for an external DNS/IP-aware egress proxy, so they do not close DNS
+rebinding or direct-network-path risks.
 
 ### Independent security review
 
 Before calling this done, a security-reviewer pass was run specifically against the boundary files
 (`phase0/`, `security/guardrails.py`, `security/audit_log.py`, `kill_switch.py`, `idor_agent.py`,
 `dispatcher_agent.py`, `graph.py`, and the API routes) — not the whole codebase, just the parts
-that make the "runs unattended" claim true. It found seven real issues, six of which are fixed
-above (each with a regression test proving the fix, not just the finding):
+that constrain unattended execution. Its findings drove the fixes and release blockers below:
 
 1. **Redirect-based pivot** (critical) — `follow_redirects=True` in Phase 0 and the IDOR agent let
    a target's `Location:` header carry the request (and an attached session cookie) to an
@@ -112,18 +156,20 @@ above (each with a regression test proving the fix, not just the finding):
    that a manual API halt (a different DB session/thread than a long-running dispatch loop) would
    never update. Fixed by refreshing from the DB on every check. See
    `tests/test_guardrails.py::test_picks_up_a_halt_committed_by_a_different_session`.
-3. **No caller-identity auth** (high) — Phase 0 verifies domain ownership, never requester
-   identity, so anyone who could reach the API could start/halt scans a different party
-   registered. Fixed with an opt-in bearer-token dependency (`SENTINEL_API_KEY`) — opt-in rather
-   than mandatory-by-default so local dev and the test suite aren't forced through it, but treated
-   as required for any deployment reachable by anyone else.
+3. **No caller identity or tenant isolation** (high, **not production-ready**) — Phase 0 verifies
+   domain control, not the caller. All `/api` routes now fail closed unless a shared
+   `SENTINEL_API_KEY` is configured, but that key neither identifies an organization nor binds an
+   approver to an asset. `approved_by` is only a stored label. Tenant identity, per-asset
+   authorization, and independently authenticated approval are release blockers.
 4. **Demonstration budget wasn't persistent** (high) — `enforce_demonstration_budget` compared a
    caller-supplied count against the cap, so it always "passed"; nothing tracked prior creations.
    Fixed with a lifetime counter on `TargetRegistration`. See
    `tests/test_idor_agent.py::test_demo_account_budget_is_actually_persistent_across_two_real_calls`.
-5. **Audit log forgeable with DB access alone** (medium-high) — plain SHA-256 means anyone who can
-   edit a row can also recompute the chain forward with the same public function. Fixed with an
-   optional HMAC key kept outside the database.
+5. **Audit log forgeable with DB access alone** (medium-high, **not production-ready by
+   default**) — plain SHA-256 means anyone who can edit a row can also recompute the chain forward
+   with the same public function. `SENTINEL_AUDIT_LOG_HMAC_KEY` provides a mitigation when it is
+   kept outside the database, but production must make this key and a remote audit anchor
+   mandatory.
 6. **Scheme confusion** (medium) — `normalize_host` compared only hostnames, so
    `file://example.com/etc/passwd` normalized identically to the real target and relied on httpx's
    own scheme rejection (not this codebase's boundary) to actually stay safe. Fixed by rejecting
@@ -151,16 +197,26 @@ Two independent checks, both fail-closed (any network error, timeout, or missing
    claims, and that downgrade is written to the audit log.
 
 `sentinel/phase0/registry.py` ties both together: `register_target()` creates an unverified row,
-`run_ownership_verification()` flips it to verified, and `start_scan_session()` is the one
-function the API/agents call to begin a scan — it re-authorizes via guardrails, re-probes the
-canary, and stamps the resulting tier onto a brand-new `ScanSession` row.
+`run_ownership_verification()` proves the token is present, and `start_scan_session()` re-runs the
+canary before stamping a new `ScanSession`. The contract service performs a fresh ownership proof
+and fresh canary immediately before it binds the lease for a run.
 
-Register via the API (add `-H "Authorization: Bearer $SENTINEL_API_KEY"` to every call below once
-you've set `SENTINEL_API_KEY` — see [Why this is safe to run unattended](#why-this-is-safe-to-run-unattended)):
+All `/api` routes fail closed until `SENTINEL_API_KEY` is configured. Contract creation and
+contract-backed execution also require `SENTINEL_CONTROL_PLANE_SIGNING_KEY`; configure both
+secrets before using the API (use a secret manager in any non-local environment):
+
+```bash
+export SENTINEL_API_KEY='local-development-secret'
+export SENTINEL_CONTROL_PLANE_SIGNING_KEY='separate-local-development-secret'
+```
+
+Register via the API. With `SENTINEL_API_KEY` configured, send the bearer header on every API
+request below:
 
 ```bash
 curl -X POST http://localhost:8000/api/targets/register \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SENTINEL_API_KEY" \
   -d '{
     "domain": "staging.yourcompany.com",
     "account_owner": "you@yourcompany.com",
@@ -169,28 +225,66 @@ curl -X POST http://localhost:8000/api/targets/register \
 # -> { "verification_token": "...", "canary_marker": "...", ... }
 
 # place the token per the response's instructions, then:
-curl -X POST http://localhost:8000/api/targets/staging.yourcompany.com/verify
+curl -X POST http://localhost:8000/api/targets/staging.yourcompany.com/verify \
+  -H "Authorization: Bearer $SENTINEL_API_KEY"
 ```
 
-Then run the scan:
+Then create a signed Tier-A contract and start it by contract ID. Contract execution fails closed
+when either `SENTINEL_API_KEY` or `SENTINEL_CONTROL_PLANE_SIGNING_KEY` is absent. The current
+`approved_by` field is an audit label supplied by the caller, not a verified approver identity.
 
 ```bash
-curl -X POST http://localhost:8000/api/scans/start -d '{"domain": "staging.yourcompany.com"}' \
-  -H "Content-Type: application/json"
-# -> { "scan_session_id": 1, "status": "running", "environment_tier": "verified_safe" }
+curl -X POST http://localhost:8000/api/contracts \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SENTINEL_API_KEY" \
+  -d '{
+    "domain": "staging.yourcompany.com",
+    "approved_by": "security-approver@yourcompany.com",
+    "customer_authorization_reference": "approved-test-window-ticket-2026-07-18",
+    "allowed_tier": "tier_a",
+    "expires_at": "2027-01-01T00:00:00Z",
+    "max_scan_sessions": 1,
+    "max_requests": 100
+  }'
+# -> { "contract_id": 1, ... }
 
-curl http://localhost:8000/api/scans/1                # headline + coverage counts
-curl http://localhost:8000/api/scans/1/findings        # every finding, confirmed and unconfirmed
+# Development/operator-only: creates a short-lived local runner permit.
+# Do NOT give SENTINEL_API_KEY to a customer runner. Its pinned issuer public
+# key must be provisioned through a separate approved onboarding channel.
+# This endpoint is disabled by default; this explicit setting is only for a
+# development deployment, never a customer or production deployment.
+export SENTINEL_DEPLOYMENT_MODE=development
+export SENTINEL_ENABLE_DEVELOPMENT_RUNNER_PERMIT_ISSUANCE=true
+curl -X POST http://localhost:8000/api/contracts/1/runner-permits \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SENTINEL_API_KEY" \
+  -d '{"allowed_path_prefixes":["/api/","/health"]}'
+# -> { "issuer_key_id": "...", "permit": { ... } }
+
+curl -X POST http://localhost:8000/api/contracts/1/runs \
+  -H "Authorization: Bearer $SENTINEL_API_KEY"
+# -> { "scan_session_id": 1, "recipe": "recon.v1", ... }
+
+curl http://localhost:8000/api/scans/1 -H "Authorization: Bearer $SENTINEL_API_KEY"
+curl http://localhost:8000/api/scans/1/findings -H "Authorization: Bearer $SENTINEL_API_KEY"
 curl -X POST http://localhost:8000/api/scans/1/halt \
-  -d '{"reason": "stopping early"}' -H "Content-Type: application/json"   # the one human touchpoint
-curl http://localhost:8000/api/audit-log/verify         # proves (or disproves) the audit trail is untampered
+  -d '{"reason": "stopping early"}' -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SENTINEL_API_KEY"
 ```
 
-`/api/scans/start` returns immediately (202) and runs the actual pipeline in a background task —
-recon, CWE mapping, dispatch, verification, and persistence all happen after the response is sent,
-so poll `/api/scans/{id}` or watch the dashboard for progress.
+`/api/scans/start` now returns 410 Gone so no public free-form domain can bypass the
+contract. The current recipe is `recon.v1`: same-origin HTTPS crawl plus metadata collection,
+with every target request reserved against the lease budget immediately before egress.
+
+Existing local databases are upgraded additively at startup for the new session bindings. This is
+an MVP convenience, not a production migration strategy: use Alembic, PostgreSQL, a durable job
+queue, and distributed coordination before enabling concurrent workers.
 
 ## The six agents
+
+This is a code inventory, not the contract-run permission set. In the current control plane only
+Recon is allowed to make target requests; the dispatcher blocks Nuclei, ZAP, and IDOR, and the
+verification agent does not perform live rechecks for a contract run.
 
 1. **Recon** ([`sentinel/agents/recon_agent.py`](sentinel/agents/recon_agent.py)) — same-origin
    crawl (off-target links are recorded, never followed), endpoint/form/param/cookie mapping,
@@ -247,10 +341,11 @@ streamlit run sentinel/dashboard/app.py                 # live dashboard
 cd docker && docker compose up -d       # OWASP Juice Shop on :3000, ZAP daemon on :8080, Postgres on :5432
 ```
 
-Register `localhost:3000` (or the container's reachable hostname) through Phase 0 exactly like
-any other target — Sentinel does not special-case "local" targets, which is the point: the same
-authorization gate applies whether you're testing your own throwaway container or a real
-production domain your company owns.
+That compose stack is for local development only; it is not itself a valid contract target because
+the contract/recon boundary requires HTTPS on port 443. To demonstrate the real contract workflow
+against it, follow the [Local Demo Runbook](docs/product/local-demo-runbook.md). It puts a
+fictional `.test` hostname on loopback behind local TLS, then uses the same authorization gate as
+any other permitted target.
 
 Nuclei is a separate binary (not a Python package) — install per
 [projectdiscovery.io/nuclei](https://github.com/projectdiscovery/nuclei#install-nuclei) and set

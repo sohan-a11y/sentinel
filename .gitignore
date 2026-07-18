@@ -8,3 +8,4 @@ audit_log.ndjson
 *.egg-info/
 .streamlit/
 .claude/
+.sentinel-demo/

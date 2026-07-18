@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import contextlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import httpx
@@ -10,7 +10,8 @@ import respx
 
 from sentinel.agents import recon_agent
 from sentinel.config import settings
-from sentinel.db.models import TargetRegistration
+from sentinel.control_plane import service
+from sentinel.db.models import ActionTier, EnvironmentTier, ScanSession, ScanStatus, TargetRegistration
 from sentinel.security import audit_log
 from sentinel.security.guardrails import UnauthorizedTargetError
 
@@ -67,6 +68,34 @@ def _make_registration(db_session, domain: str = DOMAIN) -> TargetRegistration:
     db_session.add(reg)
     db_session.flush()
     return reg
+
+
+def _make_contract_bound_scan(
+    db_session, registration: TargetRegistration, *, max_requests: int = 10
+) -> ScanSession:
+    """Create the minimum authorized execution context recon_node accepts."""
+    contract = service.create_scan_contract(
+        db_session,
+        registration=registration,
+        approved_by="approver@example.com",
+        allowed_tier=ActionTier.TIER_A,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        max_requests=max_requests,
+    )
+    _, lease_token = service.issue_action_lease(
+        db_session,
+        contract=contract,
+        requested_tier=ActionTier.TIER_A,
+    )
+    scan_session = ScanSession(
+        target_id=registration.id,
+        status=ScanStatus.RUNNING,
+        environment_tier=EnvironmentTier.VERIFIED_SAFE,
+    )
+    db_session.add(scan_session)
+    db_session.flush()
+    service.activate_lease_for_scan(db_session, lease_token=lease_token, scan_session=scan_session)
+    return scan_session
 
 
 def _mock_site() -> None:
@@ -223,15 +252,18 @@ def test_rate_limit_throttles_between_requests(monkeypatch, db_session):
 def test_recon_node_returns_site_map_and_audits(monkeypatch, db_session):
     _fast_settings(monkeypatch)
     _mock_site()
-    _make_registration(db_session)
+    monkeypatch.setattr(settings, "control_plane_signing_key", "test-signing-key")
+    registration = _make_registration(db_session)
+    scan_session = _make_contract_bound_scan(db_session, registration)
     monkeypatch.setattr(recon_agent, "get_session", lambda: _fake_get_session(db_session))
 
-    result = recon_agent.recon_node({"target_domain": DOMAIN})
+    result = recon_agent.recon_node({"target_domain": DOMAIN, "scan_session_id": scan_session.id})
 
     assert result["current_phase"] == "recon_complete"
     site_map = result["site_map"]
     assert site_map["domain"] == DOMAIN
     assert site_map["forms_count"] == 1
+    assert scan_session.contract_id is not None
 
     actions = [e.action for e in db_session.query(audit_log.AuditLogEntry).all()]
     assert "crawl_started" in actions
@@ -249,18 +281,67 @@ def test_recon_node_rejects_unregistered_domain(monkeypatch, db_session):
 
 
 def test_recon_node_refuses_to_crawl_a_halted_session(monkeypatch, db_session):
-    from sentinel.db.models import ScanSession, ScanStatus
     from sentinel.security.guardrails import ScanHaltedError
 
-    _mock_site()
+    monkeypatch.setattr(settings, "control_plane_signing_key", "test-signing-key")
     reg = _make_registration(db_session)
-    scan_session = ScanSession(target_id=reg.id, status=ScanStatus.HALTED, halted_reason="anomaly")
-    db_session.add(scan_session)
+    scan_session = _make_contract_bound_scan(db_session, reg)
+    scan_session.status = ScanStatus.HALTED
+    scan_session.halted_reason = "anomaly"
     db_session.flush()
     monkeypatch.setattr(recon_agent, "get_session", lambda: _fake_get_session(db_session))
 
-    with pytest.raises(ScanHaltedError):
+    with pytest.raises(ScanHaltedError, match="anomaly"):
         recon_agent.recon_node({"target_domain": DOMAIN, "scan_session_id": scan_session.id})
+
+
+@respx.mock
+def test_contract_recon_reserves_a_lease_action_before_each_target_request(monkeypatch, db_session):
+    """The contract runner must not merely issue a lease: every crawler
+    request, including script/error-page fetches, spends it before egress."""
+    _fast_settings(monkeypatch)
+    _mock_site()
+    monkeypatch.setattr(settings, "control_plane_signing_key", "test-signing-key")
+    registration = _make_registration(db_session)
+    contract = service.create_scan_contract(
+        db_session,
+        registration=registration,
+        approved_by="approver@example.com",
+        allowed_tier=ActionTier.TIER_A,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        max_requests=10,
+    )
+    _, lease_token = service.issue_action_lease(
+        db_session,
+        contract=contract,
+        requested_tier=ActionTier.TIER_A,
+    )
+    scan_session = ScanSession(
+        target_id=registration.id,
+        status=ScanStatus.RUNNING,
+        environment_tier=EnvironmentTier.VERIFIED_SAFE,
+    )
+    db_session.add(scan_session)
+    db_session.flush()
+    service.activate_lease_for_scan(db_session, lease_token=lease_token, scan_session=scan_session)
+
+    calls: list[str] = []
+    original_reserve = service.reserve_recon_request
+
+    def reserve(*args, **kwargs):
+        calls.append(kwargs["request_url"])
+        return original_reserve(*args, **kwargs)
+
+    monkeypatch.setattr(service, "reserve_recon_request", reserve)
+    monkeypatch.setattr(recon_agent, "get_session", lambda: _fake_get_session(db_session))
+
+    recon_agent.recon_node({"target_domain": DOMAIN, "scan_session_id": scan_session.id})
+
+    assert f"https://{DOMAIN}/" in calls
+    assert f"https://{DOMAIN}/static/app.js" in calls
+    assert len(calls) >= 5  # root, three pages, JS, and the error-page probe
+    assert scan_session.contract_id == contract.id
+    assert scan_session.id is not None
 
 
 def test_process_scripts_skips_non_http_scheme_src_without_crashing(db_session):

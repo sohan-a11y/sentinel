@@ -40,8 +40,16 @@ def _style_status(value: str) -> str:
 
 def _request_halt(scan_session_id: int) -> None:
     url = KILLSWITCH_URL_TEMPLATE.format(scan_session_id=scan_session_id)
+    api_key = os.getenv("SENTINEL_API_KEY")
+    if not api_key:
+        st.error("Set SENTINEL_API_KEY before using the dashboard halt control.")
+        return
     try:
-        response = httpx.post(url, timeout=5.0)
+        response = httpx.post(
+            url,
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=5.0,
+        )
         response.raise_for_status()
         st.success(f"Halt request sent for scan session {scan_session_id}.")
     except httpx.HTTPError as exc:

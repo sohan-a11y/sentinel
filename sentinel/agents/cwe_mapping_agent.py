@@ -20,6 +20,7 @@ import json
 from typing import Callable
 
 from sentinel.agents.state import CweChecklistItem, SentinelState, SiteMap
+from sentinel.config import settings
 from sentinel.cwe.mapping import load_cwe_catalog
 from sentinel.db.models import CweApplicability, ScanSession
 from sentinel.db.session import get_session
@@ -30,6 +31,8 @@ AGENT_NAME = "cwe_mapping_agent"
 
 LLM_BATCH_SIZE = 20
 LLM_UNAVAILABLE_REASON = "LLM unavailable — defaulting to applicable, needs manual triage"
+LLM_JUDGMENT_CAP_REASON = "AI judgment cap reached for this run — needs manual triage"
+LLM_MISSING_VERDICT_REASON = "LLM did not return a verdict for this CWE — defaulting to applicable, needs manual triage"
 
 Verdict = tuple[bool, str]
 RuleFn = Callable[[SiteMap], "Verdict | None"]
@@ -412,6 +415,17 @@ def apply_llm_pass(undecided: list[dict], site_map: SiteMap) -> tuple[list[CweCh
     if not undecided:
         return [], True
 
+    # A cap is useful only for a deliberately short, synthetic demonstration.
+    # The remaining CWE categories stay in the checklist as manual triage;
+    # they are never misrepresented as AI-reviewed.
+    cap = settings.llm_max_cwe_judgments
+    ai_candidates = undecided if cap is None else undecided[: max(0, cap)]
+    capped_items = [
+        _make_item(cwe, True, LLM_JUDGMENT_CAP_REASON) for cwe in undecided[len(ai_candidates) :]
+    ]
+    if not ai_candidates:
+        return capped_items, True
+
     try:
         client = get_llm_client()
     except LlmConfigurationError:
@@ -419,7 +433,7 @@ def apply_llm_pass(undecided: list[dict], site_map: SiteMap) -> tuple[list[CweCh
 
     verdicts: dict[str, Verdict] = {}
     all_batches_succeeded = True
-    for batch in _chunked(undecided, LLM_BATCH_SIZE):
+    for batch in _chunked(ai_candidates, LLM_BATCH_SIZE):
         try:
             verdicts.update(_judge_batch(client, batch, site_map))
         except Exception:
@@ -427,16 +441,27 @@ def apply_llm_pass(undecided: list[dict], site_map: SiteMap) -> tuple[list[CweCh
             continue
 
     items: list[CweChecklistItem] = []
-    for cwe in undecided:
+    for cwe in ai_candidates:
         if cwe["cwe_id"] in verdicts:
             applicable, reason = verdicts[cwe["cwe_id"]]
         else:
             applicable, reason = (
                 True,
-                "LLM did not return a verdict for this CWE — defaulting to applicable, needs manual triage",
+                LLM_MISSING_VERDICT_REASON,
             )
         items.append(_make_item(cwe, applicable, reason))
-    return items, all_batches_succeeded
+    return [*items, *capped_items], all_batches_succeeded
+
+
+def _successful_llm_verdict_count(items: list[CweChecklistItem]) -> int:
+    """Count actual model verdicts, excluding safe manual-triage fallbacks."""
+
+    fallback_reasons = {
+        LLM_UNAVAILABLE_REASON,
+        LLM_JUDGMENT_CAP_REASON,
+        LLM_MISSING_VERDICT_REASON,
+    }
+    return sum(1 for item in items if item.get("reason") not in fallback_reasons)
 
 
 # --------------------------------------------------------------------------
@@ -501,7 +526,7 @@ def cwe_mapping_node(state: SentinelState) -> dict:
                 "applicable_count": applicable_count,
                 "not_applicable_count": not_applicable_count,
                 "catalog_size": len(catalog),
-                "llm_judged_count": len(undecided) if llm_available else 0,
+                "llm_judged_count": _successful_llm_verdict_count(llm_items),
             },
         )
 

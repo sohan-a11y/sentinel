@@ -13,6 +13,7 @@ we downgrade to Tier A silently-to-the-user but loudly-to-the-audit-log.
 from __future__ import annotations
 
 import uuid
+from urllib.parse import urlparse
 
 import httpx
 
@@ -20,6 +21,8 @@ from sentinel.config import settings
 from sentinel.db.models import EnvironmentTier
 from sentinel.security import safe_http
 from sentinel.security.guardrails import PivotViolationError, normalize_host
+
+_ALLOWED_CANARY_METHODS = frozenset({"GET", "HEAD"})
 
 
 def generate_canary_marker() -> str:
@@ -36,6 +39,37 @@ def render_canary_url(url_template: str, marker: str) -> str:
     return url_template.replace("{marker}", marker)
 
 
+def validate_canary_configuration(domain: str, url_template: str, method: str = "GET") -> str:
+    """Validate the customer-provided live-environment canary configuration.
+
+    A canary is evidence about the registered target only when it probes that
+    exact HTTPS origin.  It must never become an unrelated endpoint that can
+    bless a different production environment for Tier B work.  Canary probes
+    are strictly read-only, so only GET and HEAD are allowed.
+    """
+    if "{marker}" not in url_template:
+        raise ValueError("canary_check_url_template must contain the literal placeholder '{marker}'")
+
+    parsed = urlparse(url_template)
+    if parsed.scheme.lower() != "https" or not parsed.hostname:
+        raise ValueError("canary_check_url_template must be an absolute HTTPS URL on the registered target")
+    if parsed.username or parsed.password:
+        raise ValueError("canary_check_url_template must not include user credentials")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("canary_check_url_template contains an invalid port") from exc
+    if port not in (None, 443):
+        raise ValueError("canary_check_url_template must use the default HTTPS port (443)")
+    if normalize_host(parsed.hostname) != normalize_host(domain):
+        raise ValueError("canary_check_url_template must use the exact registered target host")
+
+    normalized_method = method.strip().upper()
+    if normalized_method not in _ALLOWED_CANARY_METHODS:
+        raise ValueError("canary_check_method must be GET or HEAD")
+    return normalized_method
+
+
 def probe_canary(url_template: str, marker: str, method: str = "GET") -> bool:
     """Hit the user-supplied URL and confirm the marker is echoed back.
 
@@ -48,11 +82,14 @@ def probe_canary(url_template: str, marker: str, method: str = "GET") -> bool:
     """
     # Phase 0 is executing here: the live environment-canary probe — this is
     # the ONLY place that ever confirms an environment is safe for Tier B.
+    normalized_method = method.strip().upper()
+    if normalized_method not in _ALLOWED_CANARY_METHODS:
+        return False
     url = render_canary_url(url_template, marker)
     expected_host = normalize_host(url)
     try:
         response = safe_http.request_same_host(
-            method.upper(),
+            normalized_method,
             url,
             expected_host,
             timeout=settings.verification_http_timeout_seconds,

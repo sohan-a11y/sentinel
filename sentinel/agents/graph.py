@@ -27,6 +27,11 @@ from sentinel.agents.recon_agent import recon_node
 from sentinel.agents.report_agent import report_node
 from sentinel.agents.state import SentinelState
 from sentinel.agents.verification_agent import verification_node
+from sentinel.control_plane import service
+from sentinel.db.models import ActionTier, ScanSession, ScanStatus, TargetRegistration
+from sentinel.db.session import get_session
+from sentinel.security import guardrails
+from sentinel.security.guardrails import ScanHaltedError
 
 
 def _route_after_dispatch(state: SentinelState) -> str:
@@ -72,17 +77,80 @@ def get_compiled_graph():
     return _compiled_graph
 
 
-def run_scan_pipeline(scan_session_id: int, target_domain: str, environment_tier: str) -> SentinelState:
-    """Synchronous entry point — invoked by the API after Phase 0's
-    start_scan_session() has already authorized and tiered this session."""
+def run_scan_pipeline(
+    scan_session_id: int,
+    target_domain: str | None = None,
+    environment_tier: str | None = None,
+) -> SentinelState:
+    """Execute only a committed, contract-bound recon.v1 session.
+
+    The retained parameters preserve the background-task call shape but are
+    intentionally ignored as authority. Target and tier are reloaded from
+    the committed database record so a future caller cannot smuggle a domain
+    or turn an old Phase-0 session into an unleased scan.
+    """
+    try:
+        with get_session() as db:
+            scan_session = db.get(ScanSession, scan_session_id)
+            if scan_session is None:
+                raise ValueError(f"ScanSession {scan_session_id} does not exist")
+            # Preserve the semantic terminal halt signal. A halted worker is
+            # not a malformed contract run, and the guard also records any
+            # lease state that made the halt necessary.
+            if scan_session.status == ScanStatus.HALTED:
+                guardrails.enforce_not_halted(db, scan_session)
+            if (
+                scan_session.status != ScanStatus.RUNNING
+                or scan_session.contract_id is None
+                or scan_session.permitted_action_tier != ActionTier.TIER_A
+            ):
+                raise service.ContractStateError(
+                    f"Scan session {scan_session_id} is not an active contract-backed recon.v1 run"
+                )
+            guardrails.enforce_not_halted(db, scan_session)
+            target = db.get(TargetRegistration, scan_session.target_id)
+            if target is None:
+                raise service.ContractStateError(
+                    f"Scan session {scan_session_id} has no registered target"
+                )
+            authoritative_domain = target.domain
+            authoritative_tier = scan_session.environment_tier.value
+    except ScanHaltedError:
+        # A policy halt is already durable; do not relabel it as a worker
+        # failure simply because graph startup observes it.
+        raise
+    except Exception as exc:
+        with get_session() as db:
+            failed_session = db.get(ScanSession, scan_session_id)
+            if failed_session is not None:
+                service.fail_contract_scan(
+                    db,
+                    scan_session=failed_session,
+                    reason=f"pipeline entry rejected: {type(exc).__name__}",
+                )
+        raise
+
     initial_state: SentinelState = {
         "scan_session_id": scan_session_id,
-        "target_domain": target_domain,
-        "environment_tier": environment_tier,
+        "target_domain": authoritative_domain,
+        "environment_tier": authoritative_tier,
         "halted": False,
         "halt_reason": None,
         "errors": [],
         "current_phase": "starting",
     }
     graph = get_compiled_graph()
-    return graph.invoke(initial_state)
+    try:
+        return graph.invoke(initial_state)
+    except ScanHaltedError:
+        raise
+    except Exception as exc:
+        with get_session() as db:
+            failed_session = db.get(ScanSession, scan_session_id)
+            if failed_session is not None:
+                service.fail_contract_scan(
+                    db,
+                    scan_session=failed_session,
+                    reason=f"pipeline execution failed: {type(exc).__name__}",
+                )
+        raise

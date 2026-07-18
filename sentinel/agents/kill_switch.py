@@ -111,6 +111,11 @@ class HaltRegistry:
         scan_session.ended_at = datetime.now(timezone.utc)
         db.flush()
 
+        # A halt must revoke its internal authority too; otherwise a worker
+        # holding a still-active lease could resume after the operator action.
+        from sentinel.control_plane import service
+
+        service.revoke_lease_for_scan(db, scan_session=scan_session, reason=reason)
         audit_log.record(
             db,
             agent=agent,

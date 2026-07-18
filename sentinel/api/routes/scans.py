@@ -1,16 +1,18 @@
-"""Scan lifecycle: start (Phase 0 gate + pipeline kickoff), status, findings."""
+"""Scan status and findings.
+
+New execution must start from /api/contracts/{id}/runs. This module keeps the
+old start URL only as an authenticated migration response so there is no
+public free-form-domain path around signed contracts and leases.
+"""
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from sentinel.agents.graph import run_scan_pipeline
 from sentinel.agents.report_agent import build_summary
 from sentinel.api.deps import get_db, require_api_key
 from sentinel.db.models import Finding, ScanSession
-from sentinel.phase0 import registry
-from sentinel.security.guardrails import UnauthorizedTargetError
 
 router = APIRouter(prefix="/api/scans", tags=["scans"], dependencies=[Depends(require_api_key)])
 
@@ -19,32 +21,14 @@ class StartScanRequest(BaseModel):
     domain: str
 
 
-def _run_pipeline_in_background(scan_session_id: int, domain: str, environment_tier: str) -> None:
-    """Runs in a FastAPI BackgroundTask thread with its OWN db session — the
-    request's session is closed by the time this executes."""
-    run_scan_pipeline(scan_session_id, domain, environment_tier)
-
-
-@router.post("/start", status_code=202)
-def start_scan(payload: StartScanRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> dict:
-    # Phase 0 is executing here: registry.start_scan_session re-runs BOTH
-    # Phase 0 checks (authorization + a fresh canary probe) before a single
-    # agent gets to run — this call is the gate for the entire pipeline below.
-    try:
-        scan_session = registry.start_scan_session(db, payload.domain)
-    except UnauthorizedTargetError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-
-    db.flush()
-    scan_session_id = scan_session.id
-    environment_tier = scan_session.environment_tier.value
-
-    background_tasks.add_task(_run_pipeline_in_background, scan_session_id, payload.domain, environment_tier)
-
+@router.post("/start", status_code=410)
+def start_scan(payload: StartScanRequest) -> dict:
+    """Retired: accepting a run-time domain would bypass the control plane."""
     return {
-        "scan_session_id": scan_session_id,
-        "status": scan_session.status.value,
-        "environment_tier": environment_tier,
+        "detail": (
+            "Free-form scan starts are retired. Create a signed contract with "
+            "POST /api/contracts, then start POST /api/contracts/{contract_id}/runs."
+        )
     }
 
 

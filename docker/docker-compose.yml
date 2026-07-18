@@ -10,15 +10,21 @@ services:
     image: bkimminich/juice-shop:latest
     container_name: sentinel-juice-shop
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     restart: unless-stopped
 
   zap:
     image: ghcr.io/zaproxy/zaproxy:stable
     container_name: sentinel-zap
-    command: zap.sh -daemon -host 0.0.0.0 -port 8080 -config api.disablekey=true -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true
+    environment:
+      SENTINEL_ZAP_API_KEY: "${SENTINEL_ZAP_API_KEY:?Set SENTINEL_ZAP_API_KEY before starting the local ZAP service}"
+    command: >-
+      zap.sh -daemon -host 0.0.0.0 -port 8080
+      -config api.disablekey=false
+      -config api.key=${SENTINEL_ZAP_API_KEY}
+      -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     restart: unless-stopped
 
   postgres:
@@ -29,7 +35,7 @@ services:
       POSTGRES_PASSWORD: sentinel_dev_only
       POSTGRES_DB: sentinel
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - sentinel_pg_data:/var/lib/postgresql/data
     restart: unless-stopped

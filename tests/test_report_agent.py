@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 
@@ -206,3 +207,43 @@ class TestReportNode:
         result = report_node({"scan_session_id": scan_session.id})
 
         assert result == {"current_phase": "report_complete"}
+        db_session.flush()
+        db_session.refresh(scan_session)
+        assert scan_session.status == ScanStatus.COMPLETED
+        assert scan_session.ended_at is not None
+
+    def test_preserves_halted_terminal_state(self, db_session, monkeypatch):
+        scan_session = _make_scan_session(
+            db_session,
+            status=ScanStatus.HALTED,
+            halted_reason="operator requested an immediate stop",
+        )
+        original_ended_at = scan_session.ended_at.replace(tzinfo=None)
+
+        @contextlib.contextmanager
+        def _fake_get_session():
+            yield db_session
+
+        monkeypatch.setattr(report_agent, "get_session", _fake_get_session)
+
+        report_node({"scan_session_id": scan_session.id})
+
+        db_session.flush()
+        db_session.refresh(scan_session)
+        assert scan_session.status == ScanStatus.HALTED
+        assert scan_session.halted_reason == "operator requested an immediate stop"
+        assert scan_session.ended_at == original_ended_at
+
+    def test_completing_a_running_session_closes_its_lease(self, db_session, monkeypatch):
+        scan_session = _make_scan_session(db_session)
+
+        @contextlib.contextmanager
+        def _fake_get_session():
+            yield db_session
+
+        monkeypatch.setattr(report_agent, "get_session", _fake_get_session)
+        with patch("sentinel.control_plane.service.complete_lease_for_scan") as complete_lease:
+            report_node({"scan_session_id": scan_session.id})
+
+        complete_lease.assert_called_once()
+        assert complete_lease.call_args.kwargs["scan_session"].id == scan_session.id

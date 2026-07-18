@@ -48,9 +48,43 @@ def test_register_target_requires_marker_placeholder(db_session):
         )
 
 
+@pytest.mark.parametrize(
+    ("canary_url", "method"),
+    [
+        ("https://other.example-test.com/api/users/{marker}", "GET"),
+        ("http://example-test.com/api/users/{marker}", "GET"),
+        ("https://example-test.com/api/users/{marker}", "POST"),
+    ],
+)
+def test_register_target_rejects_canary_outside_the_approved_origin(db_session, canary_url, method):
+    with pytest.raises(ValueError):
+        registry.register_target(
+            db_session,
+            domain=DOMAIN,
+            account_owner="alice@corp.com",
+            canary_check_url_template=canary_url,
+            canary_check_method=method,
+        )
+
+
 def test_run_ownership_verification_requires_existing_registration(db_session):
     with pytest.raises(TargetNotRegisteredError):
         registry.run_ownership_verification(db_session, "never-registered.com")
+
+
+def test_run_ownership_verification_can_fail_closed_without_dns_fallback(db_session, monkeypatch):
+    """A local-only caller can avoid sending a DNS query when HTTP proof fails."""
+    _register(db_session)
+    monkeypatch.setattr("sentinel.phase0.verification.check_well_known", lambda *_args: False)
+
+    def dns_must_not_run(*_args):
+        raise AssertionError("DNS fallback must be disabled for this verification")
+
+    monkeypatch.setattr("sentinel.phase0.verification.check_dns_txt", dns_must_not_run)
+
+    updated = registry.run_ownership_verification(db_session, DOMAIN, allow_dns_fallback=False)
+
+    assert updated.is_ownership_verified is False
 
 
 @respx.mock

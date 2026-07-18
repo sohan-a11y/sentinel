@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 import httpx
 import pytest
 import respx
 
 from sentinel.agents import verification_agent
-from sentinel.db.models import EnvironmentTier, ScanSession, ScanStatus, TargetRegistration
+from sentinel.config import settings
+from sentinel.control_plane import service
+from sentinel.db.models import ActionTier, EnvironmentTier, ScanSession, ScanStatus, TargetRegistration
 
 
 def _registration(db_session, domain: str = "verify-target.com") -> TargetRegistration:
@@ -298,6 +301,41 @@ class TestUnknownDetectionMethod:
         assert len(result) == 1
         assert result[0]["status"] == "unconfirmed"
         assert result[0]["verification_method"] == "unknown_method_fallback"
+
+
+def test_contract_run_never_makes_a_live_verification_reprobe(monkeypatch, db_session):
+    monkeypatch.setattr(settings, "control_plane_signing_key", "test-signing-key")
+    registration = _registration(db_session)
+    contract = service.create_scan_contract(
+        db_session,
+        registration=registration,
+        approved_by="approver@example.com",
+        allowed_tier=ActionTier.TIER_A,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    _, lease_token = service.issue_action_lease(
+        db_session,
+        contract=contract,
+        requested_tier=ActionTier.TIER_A,
+    )
+    scan_session = _scan_session(db_session, registration)
+    service.activate_lease_for_scan(db_session, lease_token=lease_token, scan_session=scan_session)
+    raw_findings = [
+        {
+            "cwe_id": "CWE-79",
+            "endpoint": "https://verify-target.com/search",
+            "tier": "tier_a",
+            "detection_method": "nuclei",
+            "poc_evidence": "matched-at: https://verify-target.com/search",
+            "confidence": 0.8,
+        }
+    ]
+
+    with patch("sentinel.agents.verification_agent.httpx.get") as get:
+        result = verification_agent.verify_findings(db_session, scan_session, raw_findings)
+
+    assert result == []
+    get.assert_not_called()
 
 
 class TestNetworkErrorHandling:

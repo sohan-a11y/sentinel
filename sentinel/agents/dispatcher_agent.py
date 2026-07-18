@@ -38,6 +38,25 @@ def run_all_engines(
     cwe_items: list,
     site_map: dict | None,
 ) -> list[RawFinding]:
+    if scan_session.contract_id is not None:
+        # A signed contract currently authorizes only recon.v1. These engines
+        # have direct or out-of-process egress paths, so a lease cannot yet
+        # enforce every action they send. Keep them policy-blocked rather than
+        # treating a Tier-A label as permission to run them.
+        guardrails.enforce_not_halted(db, scan_session)
+        audit_log.record(
+            db,
+            agent="dispatcher_agent",
+            action="contract_recipe_engines_blocked",
+            payload={
+                "scan_session_id": scan_session.id,
+                "contract_id": scan_session.contract_id,
+                "blocked_engines": ["nuclei", "zap", "custom_idor"],
+                "reason": "recon.v1 is the only contract-authorized recipe",
+            },
+        )
+        return []
+
     engines = [
         ("nuclei", lambda: nuclei_wrapper.run(db, scan_session, registration, cwe_items)),
         ("zap", lambda: zap_wrapper.run(db, scan_session, registration, cwe_items)),

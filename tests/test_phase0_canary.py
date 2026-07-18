@@ -18,6 +18,27 @@ def test_render_canary_url_requires_placeholder():
         canary.render_canary_url("https://app.test/api/users/42", "deadbeef")
 
 
+class TestCanaryConfiguration:
+    def test_accepts_only_same_origin_read_only_probe(self):
+        method = canary.validate_canary_configuration(
+            "app.test", "https://app.test/api/users/{marker}", "head"
+        )
+        assert method == "HEAD"
+
+    @pytest.mark.parametrize(
+        ("url_template", "method"),
+        [
+            ("https://other.test/api/users/{marker}", "GET"),
+            ("http://app.test/api/users/{marker}", "GET"),
+            ("https://app.test:8443/api/users/{marker}", "GET"),
+            ("https://app.test/api/users/{marker}", "POST"),
+        ],
+    )
+    def test_rejects_unscoped_or_mutating_configuration(self, url_template, method):
+        with pytest.raises(ValueError):
+            canary.validate_canary_configuration("app.test", url_template, method)
+
+
 class TestProbeCanary:
     @respx.mock
     def test_true_when_marker_echoed_back(self):
@@ -47,15 +68,11 @@ class TestProbeCanary:
         respx.get("https://app.test/api/users/deadbeef").mock(side_effect=httpx.ConnectError("refused"))
         assert canary.probe_canary("https://app.test/api/users/{marker}", marker) is False
 
-    @respx.mock
-    def test_supports_post_method(self):
+    def test_rejects_mutating_method_without_sending_a_request(self):
         marker = "deadbeef"
-        respx.post("https://app.test/api/debug/echo?id=deadbeef").mock(
-            return_value=httpx.Response(200, text=f"echo:{marker}")
-        )
         assert (
             canary.probe_canary("https://app.test/api/debug/echo?id={marker}", marker, method="post")
-            is True
+            is False
         )
 
 

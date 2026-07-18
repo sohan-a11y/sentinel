@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from sentinel.config import settings
+from sentinel.db.migrations import upgrade_schema
 from sentinel.db.models import Base
 
 _connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
@@ -17,6 +18,7 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    upgrade_schema(engine)
 
 
 @contextmanager
