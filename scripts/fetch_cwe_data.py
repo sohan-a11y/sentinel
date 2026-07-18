@@ -12,6 +12,9 @@ the stdlib xml.etree.ElementTree (no new heavy XML dependency), keeps only
 weaknesses/categories whose name matches a web-application-relevant keyword
 and does not match a hardware/firmware/memory-corruption/embedded-systems
 exclusion keyword, and overwrites the curated dataset file.
+
+This utility only downloads the public CWE catalog; it never contacts a
+customer target or participates in a Sentinel scan.
 """
 from __future__ import annotations
 
