@@ -9,3 +9,5 @@ audit_log.ndjson
 .streamlit/
 .claude/
 .sentinel-demo/
+# Release assets are uploaded to GitHub Releases, not committed to source control.
+docs/assets/*.mp4

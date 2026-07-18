@@ -1,61 +1,99 @@
 # Sentinel
 
-Sentinel is a prototype authorization control plane and multi-agent web-security research
-platform. Its only supported public execution path is a bounded, signed contract run against a
-previously verified domain. That path currently performs recon only; the broader scanner modules
-in this repository are not approved for unattended customer use.
+<div align="center">
 
-**Project demo environment:** Sentinel is currently **CLI-first**. Double-click
-[`Start Sentinel Demo.cmd`](Start%20Sentinel%20Demo.cmd) to run a guided, local-only demo. The
-CLI is the operator experience for this MVP; FastAPI is the control-plane/integration engine behind
-it, and the Streamlit screen is an optional developer dashboard rather than the customer workflow.
-For a real, opt-in AI preview, configure a freshly issued TokenRouter key in your local `.env` and
-double-click [`Start Sentinel AI Demo.cmd`](Start%20Sentinel%20AI%20Demo.cmd). It sends only the
-disposable local demo's site map to TokenRouter; it never sends a customer target, credential, or
-request body. The CLI labels AI output as triage—not a confirmed vulnerability.
+**Governed AI-assisted web-security testing — built for customer control, not blind automation.**
 
-For the enterprise product direction, execution boundaries, and phased path to safe continuous
-validation, see [the Authorization and Safety Control Plane](docs/product/authorization-control-plane.md).
-For the customer-held-data model, the implemented signed-permit foundation, and the controls still
-required before active testing, see the [Zero-Trust Customer-Hosted Runner guide](docs/product/zero-trust-customer-runner.md).
-For a nontechnical, business-ready architecture and operating model, see the
-[Business Architecture](docs/product/business-architecture.md).
-For a safe, local-only recording setup, use the [Local Demo Runbook](docs/product/local-demo-runbook.md)
-and its companion [Demo Video Script](docs/product/demo-video-script.md).
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](#quickstart)
+[![CLI-first](https://img.shields.io/badge/Experience-CLI--first-111827)](#run-the-demo)
+[![Contract runs](https://img.shields.io/badge/Contract%20runs-Recon%20only-0F766E)](#what-runs-today)
+[![Audit](https://img.shields.io/badge/Audit-Hash--chained-7C3AED)](#what-runs-today)
 
-**Current automation boundary:** a signed contract run is unattended **recon only**. No agent
-asks a human to approve an individual recon request, but every request spends a short-lived
-internal lease immediately before it leaves the process. Nuclei, ZAP, IDOR, and live verification
-are intentionally blocked for contract runs until they can be forced through a mandatory egress
-proxy.
+</div>
 
-**Production status: do not expose this MVP to customers, an untrusted network, or production
-targets.** A customer-ready release needs tenant-scoped identity and authorization, an
-independently authenticated approval workflow, a mandatory DNS/IP-aware egress proxy with no
-direct runner network path, and PostgreSQL-backed durable jobs/workers with distributed locking.
-The current shared API key is only a deployment gate, and `approved_by` is an operator-supplied
-label — neither establishes who approved a contract nor provides tenant isolation. The HMAC
-protects immutable policy scope, not arbitrary database lifecycle writes, so this MVP also assumes
-the database is trusted.
+> **Sentinel helps security teams answer one practical question:** “What should we review first?”
+> It proves control of a target, binds activity to a short permission contract, maps the approved
+> surface, and uses AI only to prioritize engineering review.
 
-The repository also includes a **local signed-permit and evidence-redaction foundation** for a
-future customer-hosted runner. It is not an active-scanning route: the current permit API is
-operator-only and uses the same shared MVP API key, so a customer runner must never receive that
-key. The local facade cannot prevent a scanner from bypassing it; active engines remain blocked
-until customer-runner enrollment, mTLS, durable revocation, and a mandatory egress boundary exist.
+<p align="center">
+  <a href="https://github.com/sohan-a11y/sentinel/releases/download/demo-2026-07-18/sentinel-cli-ai-demo-2min.mp4">
+    <img src="docs/assets/sentinel-cli-ai-demo-thumbnail.jpg" width="960" alt="Sentinel CLI demo showing TokenRouter AI triage and audit controls">
+  </a>
+</p>
 
-That boundary is code, not a prompt telling the LLM to behave:
+<p align="center">
+  <strong><a href="https://github.com/sohan-a11y/sentinel/releases/download/demo-2026-07-18/sentinel-cli-ai-demo-2min.mp4">&#9654; Watch the two-minute Sentinel CLI demo</a></strong>
+  <br>
+  Local target only &middot; TokenRouter AI triage &middot; No active exploit tools
+</p>
 
-- [`sentinel/security/guardrails.py`](sentinel/security/guardrails.py) — hard boundaries. Every
-  dispatch call starts with `enforce_target_authorized`, `enforce_tier`, `enforce_no_pivot`, or
-  `enforce_not_halted`. These raise real exceptions. There is no `force=`, `override=`, or env var
-  that changes their behavior — changing them means editing this file, which means a reviewed
-  commit.
-- [`sentinel/phase0/`](sentinel/phase0) — the gate that runs *before* any of the above even has a
-  registered target to check against.
+**Jump to:** [Run the demo](#run-the-demo) · [What runs today](#what-runs-today) · [Architecture](#architecture) · [Security controls](#what-the-current-mvp-enforces) · [Detailed docs](#learn-more)
 
-If you take nothing else from this README: **read Phase 0 and guardrails.py before you extend
-anything.** Every other module in this repo is built to call into them, not around them.
+## Why Sentinel
+
+| Traditional automated scanner | Sentinel |
+|---|---|
+| Starts with a URL and scans | Starts with ownership proof and an approved contract |
+| Mixes suggestions with findings | Keeps AI triage, evidence, and confirmed findings separate |
+| Safety depends on operator discipline | Enforces target, tier, rate, halt, and audit boundaries in code |
+| Often gives a long report with little context | Shows coverage, scope, audit health, and the next engineering action |
+
+## Run the demo
+
+The project is **CLI-first**. No web dashboard is required.
+
+1. Double-click [`Start Sentinel Demo.cmd`](Start%20Sentinel%20Demo.cmd) for a safe local demo.
+2. Double-click [`Start Sentinel AI Demo.cmd`](Start%20Sentinel%20AI%20Demo.cmd) for the optional
+   TokenRouter AI preview. If no key is configured, it asks for one with hidden input and never
+   writes it to the repository.
+3. Use `Enter` to refresh, `H` to halt, `R` to export a report, or `Q` to exit.
+
+The demo fixes the target at `https://127.0.0.1`. It creates a disposable local HTTPS site, proves
+control of it, and records the run in a local audit log. The AI mode sends only the synthetic local
+site-map summary to TokenRouter — never customer credentials, request bodies, database records, or
+session tokens.
+
+## What runs today
+
+| Included in a contract run | Deliberately blocked in a contract run |
+|---|---|
+| Ownership proof and environment checks | Nuclei active templates |
+| Same-origin `recon.v1` mapping | ZAP active scanning |
+| CWE applicability and AI-assisted triage | IDOR manipulation and live verification |
+| Manual halt, request leases, audit records, Markdown report | Payload generation and proof-of-concept exploitation |
+
+AI assists with **CWE relevance triage**. It cannot select a target, expand the approved scope,
+change a contract, or execute an exploit. Zero findings are never presented as proof that an
+application is secure.
+
+> [!WARNING]
+> This is a prototype and local demo environment, not a customer-ready production service. A
+> production release still needs tenant-scoped identity, independently authenticated approvals, a
+> mandatory DNS/IP-aware egress proxy, and durable multi-worker infrastructure.
+
+## How Sentinel works
+
+```mermaid
+flowchart LR
+    O["Security operator"] --> P["Phase 0: ownership proof + environment canary"]
+    P --> C["Signed scan contract: target, time, budget, tier"]
+    C --> G["Code-enforced guardrails + short-lived request lease"]
+    G --> R["Same-origin recon.v1"]
+    R --> T["CWE coverage and optional AI triage"]
+    T --> A["Audit trail, findings, and engineering report"]
+    K["Kill switch"] -. "monitors and can halt" .-> G
+```
+
+Every stage is traceable. The LLM is a bounded reasoning component inside the workflow — never the
+authority that decides where or how the system may test.
+
+## Learn more
+
+- [Two-minute demo video script](docs/product/demo-video-script.md)
+- [Local demo runbook](docs/product/local-demo-runbook.md)
+- [Business-ready architecture](docs/product/business-architecture.md)
+- [Authorization and safety control plane](docs/product/authorization-control-plane.md)
+- [Zero-trust customer-hosted runner guide](docs/product/zero-trust-customer-runner.md)
 
 ## Architecture
 
