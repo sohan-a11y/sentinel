@@ -1,5 +1,12 @@
 # Sentinel
 
+![GitHub License](https://img.shields.io/github/license/sohan-a11y/sentinel?style=flat-square)
+![GitHub Last Commit](https://img.shields.io/github/last-commit/sohan-a11y/sentinel?style=flat-square)
+![GitHub Stars](https://img.shields.io/github/stars/sohan-a11y/sentinel?style=flat-square)
+
+[![Skills](https://skillicons.dev/icons?i=python,fastapi,docker)](https://skillicons.dev)
+
+
 <div align="center">
 
 **Governed AI-assisted web-security testing — built for customer control, not blind automation.**
@@ -470,3 +477,14 @@ docker/
 tests/                     one test file per module + tests/test_graph.py end-to-end,
                            every external boundary mocked
 ```
+
+
+---
+
+<div align="center">
+
+**Built by [M Sai Sohan (@sohan-a11y)](https://github.com/sohan-a11y)**
+
+*If you find this project useful, please consider giving it a ⭐ on GitHub!*
+
+</div>
